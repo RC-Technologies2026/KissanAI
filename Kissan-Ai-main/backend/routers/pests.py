@@ -58,7 +58,7 @@ async def detect_pest(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
     # --- Save image record ---
-    image = Image(user_id=current_user.id, image_url=cloudinary_result.secure_url, image_type="pest")
+    image = Image(user_id=current_user.id, image_url=cloudinary_result.build_url(secure=True), image_type="pest")
     db.add(image)
     await db.commit()
     await db.refresh(image)

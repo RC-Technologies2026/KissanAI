@@ -86,7 +86,7 @@ async def upload_image(
     # --- Save to database ---
     image = Image(
         user_id=current_user.id,
-        image_url=result["secure_url"],
+        image_url=result.build_url(secure=True),
         image_type=image_type,
     )
     db.add(image)
@@ -97,6 +97,6 @@ async def upload_image(
         id=image.id,
         image_url=image.image_url,
         image_type=image.image_type,
-        public_id=result.get("public_id"),
+        public_id=result.public_id,
         uploaded_at=image.uploaded_at,
     )
