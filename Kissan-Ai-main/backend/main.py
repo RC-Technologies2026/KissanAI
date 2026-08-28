@@ -9,6 +9,7 @@ from routers.pesticides import router as pesticides_router
 from routers.insecticides import router as insecticides_router
 from routers.irrigation import router as irrigation_router
 from routers.history import router as history_router
+from routers.chat import router as chat_router
 import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
 app = FastAPI(title="KissanAI API", version="0.1.0")
@@ -30,6 +31,7 @@ app.include_router(pesticides_router)
 app.include_router(insecticides_router)
 app.include_router(irrigation_router)
 app.include_router(history_router)
+app.include_router(chat_router)
 
 @app.get("/health")
 def health_check():
