@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.auth import router as auth_router
 from routers.images import router as images_router
+from routers.weather import router as weather_router
 import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
 app = FastAPI(title="KissanAI API", version="0.1.0")
@@ -16,6 +17,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(images_router)
+app.include_router(weather_router)
 
 @app.get("/health")
 def health_check():
