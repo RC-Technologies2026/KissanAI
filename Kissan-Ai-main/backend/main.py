@@ -5,6 +5,8 @@ from routers.images import router as images_router
 from routers.weather import router as weather_router
 from routers.disease import router as disease_router
 from routers.pests import router as pests_router
+from routers.pesticides import router as pesticides_router
+from routers.insecticides import router as insecticides_router
 import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
 app = FastAPI(title="KissanAI API", version="0.1.0")
@@ -22,6 +24,8 @@ app.include_router(images_router)
 app.include_router(weather_router)
 app.include_router(disease_router)
 app.include_router(pests_router)
+app.include_router(pesticides_router)
+app.include_router(insecticides_router)
 
 @app.get("/health")
 def health_check():
