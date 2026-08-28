@@ -1,4 +1,5 @@
 import json
+import logging
 import httpx
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -12,6 +13,8 @@ from auth.utils import get_current_user
 from redis_client import redis_get, redis_set
 from rate_limiter import limiter
 import os
+
+logger = logging.getLogger("kissanai.weather")
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
 
@@ -51,6 +54,7 @@ async def get_current_weather(
     # --- 1. Check Redis cache ---
     cached_data = await redis_get(cache_key)
     if cached_data:
+        logger.info("Cache HIT for %s", cache_key)
         data = json.loads(cached_data)
         return WeatherResponse(
             location=location,
@@ -107,8 +111,10 @@ async def get_current_weather(
         "cached_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # --- 4. Write to Redis cache (fire-and-forget) ---
-    await redis_set(cache_key, json.dumps(weather_data), ex=CACHE_TTL)
+    # --- 4. Write to Redis cache ---
+    redis_ok = await redis_set(cache_key, json.dumps(weather_data), ex=CACHE_TTL)
+    if not redis_ok:
+        logger.warning("Redis cache write failed for %s — weather still returned from OWM", cache_key)
 
     # --- 5. Write to PostgreSQL (persistent record) ---
     weather_record = WeatherCache(

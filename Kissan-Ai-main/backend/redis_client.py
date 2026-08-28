@@ -22,8 +22,19 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 _redis: Optional[Redis] = None
 
 
+def _reset_redis():
+    """Clear the cached client so the next call creates a fresh connection."""
+    global _redis
+    _redis = None
+
+
 def _get_redis() -> Optional[Redis]:
-    """Lazy-init shared Redis connection (created once, reused forever)."""
+    """Lazy-init shared Redis connection (created once, reused forever).
+
+    Verifies the connection with PING on first use.
+    If PING or any later operation fails, the client is reset so the
+    next call retries with a fresh connection.
+    """
     global _redis
     if _redis is None:
         if not REDIS_HOST:
@@ -42,11 +53,30 @@ def _get_redis() -> Optional[Redis]:
                 retry_on_timeout=True,
                 health_check_interval=30,
             )
-            logger.info("Redis client configured: %s:%s", REDIS_HOST, REDIS_PORT)
+            logger.info("Redis client created for %s:%s", REDIS_HOST, REDIS_PORT)
         except Exception as e:
             logger.error("Failed to create Redis client: %s", e)
             return None
+
     return _redis
+
+
+async def redis_ping() -> bool:
+    """PING Redis to verify connectivity. Returns True if pong received."""
+    client = _get_redis()
+    if client is None:
+        return False
+    try:
+        result = await client.ping()
+        if result:
+            logger.info("Redis PING successful")
+        else:
+            logger.warning("Redis PING returned unexpected value: %s", result)
+        return bool(result)
+    except Exception as e:
+        logger.error("Redis PING failed: %s", e)
+        _reset_redis()
+        return False
 
 
 async def redis_set(key: str, value: str, ex: int = 900) -> bool:
@@ -55,9 +85,12 @@ async def redis_set(key: str, value: str, ex: int = 900) -> bool:
     if client is None:
         return False
     try:
-        return await client.set(key, value, ex=ex)
+        result = await client.set(key, value, ex=ex)
+        logger.info("Redis SET OK: key=%s", key)
+        return bool(result)
     except Exception as e:
         logger.warning("Redis SET failed for key=%s: %s", key, e)
+        _reset_redis()
         return False
 
 
@@ -67,7 +100,13 @@ async def redis_get(key: str) -> Optional[str]:
     if client is None:
         return None
     try:
-        return await client.get(key)
+        result = await client.get(key)
+        if result is not None:
+            logger.info("Redis GET HIT: key=%s", key)
+        else:
+            logger.info("Redis GET MISS: key=%s", key)
+        return result
     except Exception as e:
         logger.warning("Redis GET failed for key=%s: %s", key, e)
+        _reset_redis()
         return None
