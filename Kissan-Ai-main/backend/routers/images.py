@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
@@ -6,6 +7,7 @@ from models.user import User
 from schemas.image import ImageUploadResponse
 from auth.utils import get_current_user
 from cloudinary import uploader
+from rate_limiter import limiter
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -31,7 +33,9 @@ def _check_magic_bytes(header: bytes) -> bool:
 
 
 @router.post("/upload", response_model=ImageUploadResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def upload_image(
+    request: Request,
     file: UploadFile = File(...),
     image_type: str = "crop",
     db: AsyncSession = Depends(get_db),
@@ -68,9 +72,11 @@ async def upload_image(
             detail="File content does not match a valid image format",
         )
 
-    # --- Upload to Cloudinary ---
+    # --- Upload to Cloudinary (non-blocking) ---
     try:
-        result = uploader.upload_resource(contents, folder="kissanai")
+        result = await asyncio.to_thread(
+            uploader.upload_resource, contents, folder="kissanai"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
