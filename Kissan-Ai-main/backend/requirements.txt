@@ -12,3 +12,6 @@ python-multipart==0.0.12
 email-validator==2.2.0
 cloudinary==1.41.0
 httpx==0.27.2
+torch==2.4.1
+torchvision==0.19.1
+Pillow==10.4.0
