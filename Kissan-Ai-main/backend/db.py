@@ -16,6 +16,11 @@ def _get_engine():
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL not set in environment")
+        # Ensure async driver: postgresql+asyncpg://
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         _engine = create_async_engine(database_url, echo=False, future=True)
     return _engine
 
