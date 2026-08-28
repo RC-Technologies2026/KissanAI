@@ -1,5 +1,9 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from rate_limiter import limiter
 from routers.auth import router as auth_router
 from routers.images import router as images_router
 from routers.weather import router as weather_router
@@ -14,9 +18,21 @@ import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
 app = FastAPI(title="KissanAI API", version="0.1.0")
 
+# --- Rate limiter (slowapi) ---
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- CORS — origins from environment ---
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _allowed_origins:
+    allow_origins = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+else:
+    # Development default: allow all origins
+    allow_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

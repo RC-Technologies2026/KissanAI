@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
@@ -9,12 +9,15 @@ from auth.utils import get_current_user
 from cloudinary import uploader
 from utils.validation import check_magic_bytes, validate_extension, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
 from vision.efficientnet import predict_disease, CONFIDENCE_THRESHOLD, MODEL_VERSION, DISEASE_CLASSES
+from rate_limiter import limiter
 
 router = APIRouter(prefix="/api/disease", tags=["disease"])
 
 
 @router.post("/detect")
+@limiter.limit("10/minute")
 async def detect_disease(
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

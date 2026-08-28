@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
@@ -9,12 +9,15 @@ from auth.utils import get_current_user
 from cloudinary import uploader
 from utils.validation import check_magic_bytes, validate_extension, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
 from vision.efficientnet import predict_pest, CONFIDENCE_THRESHOLD, MODEL_VERSION, PEST_CLASSES
+from rate_limiter import limiter
 
 router = APIRouter(prefix="/api/pests", tags=["pests"])
 
 
 @router.post("/detect")
+@limiter.limit("10/minute")
 async def detect_pest(
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

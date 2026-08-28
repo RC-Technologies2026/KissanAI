@@ -1,6 +1,6 @@
 import asyncio
 import os
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
@@ -8,6 +8,7 @@ from models.chat_history import ChatHistory
 from models.user import User
 from schemas.chat import ChatMessageRequest, ChatMessageResponse
 from auth.utils import get_current_user
+from rate_limiter import limiter
 import google.generativeai as genai
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -22,7 +23,9 @@ else:
 
 
 @router.post("", response_model=ChatMessageResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("15/minute")
 async def chat(
+    request: Request,
     body: ChatMessageRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

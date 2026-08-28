@@ -1,7 +1,7 @@
 import json
 import httpx
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
@@ -10,6 +10,7 @@ from models.user import User
 from schemas.weather import WeatherResponse
 from auth.utils import get_current_user
 from redis_client import redis_get, redis_set
+from rate_limiter import limiter
 import os
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
@@ -20,7 +21,9 @@ OPENWEATHERMAP_URL = "https://api.openweathermap.org/data/2.5/weather"
 
 
 @router.get("/current", response_model=WeatherResponse)
+@limiter.limit("20/minute")
 async def get_current_weather(
+    request: Request,
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
     db: AsyncSession = Depends(get_db),
