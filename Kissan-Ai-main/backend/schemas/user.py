@@ -1,7 +1,10 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
+
+# bcrypt's maximum input is 72 bytes
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 class UserRegister(BaseModel):
@@ -10,10 +13,28 @@ class UserRegister(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
 
+    @field_validator("password")
+    @classmethod
+    def password_byte_length(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+            raise ValueError(
+                f"Password must not exceed {BCRYPT_MAX_PASSWORD_BYTES} bytes"
+            )
+        return v
+
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_byte_length(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+            raise ValueError(
+                f"Password must not exceed {BCRYPT_MAX_PASSWORD_BYTES} bytes"
+            )
+        return v
 
 
 class UserOut(BaseModel):
