@@ -4,5 +4,6 @@
     "${workspaceFolder}/backend"
   ],
   "python.analysis.autoSearchPaths": true,
-  "python.analysis.typeCheckingMode": "basic"
+  "python.analysis.typeCheckingMode": "basic",
+  "files.eol": "\n"
 }
