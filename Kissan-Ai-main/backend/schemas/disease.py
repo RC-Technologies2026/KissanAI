@@ -11,6 +11,7 @@ class DiseaseDetectionResponse(BaseModel):
     confidence_score: float
     model_version: str
     detected_at: datetime
+    diagnosis: Optional[str] = None
 
 
 class DiseaseFallbackResponse(BaseModel):
