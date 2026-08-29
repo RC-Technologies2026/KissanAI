@@ -84,9 +84,20 @@ async def upload_image(
         )
 
     # --- Save to database ---
+    if isinstance(result, dict):
+        image_url = result.get("secure_url") or result.get("url")
+        public_id = result.get("public_id")
+    else:
+        image_url = getattr(result, "secure_url", None) or getattr(result, "url", str(result))
+        public_id = getattr(result, "public_id", None)
+
     image = Image(
         user_id=current_user.id,
+<<<<<<< Updated upstream
         image_url=result.build_url(secure=True),
+=======
+        image_url=image_url,
+>>>>>>> Stashed changes
         image_type=image_type,
     )
     db.add(image)
@@ -97,6 +108,10 @@ async def upload_image(
         id=image.id,
         image_url=image.image_url,
         image_type=image.image_type,
+<<<<<<< Updated upstream
         public_id=result.public_id,
+=======
+        public_id=public_id,
+>>>>>>> Stashed changes
         uploaded_at=image.uploaded_at,
     )
