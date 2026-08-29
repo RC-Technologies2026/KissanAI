@@ -1,13 +1,25 @@
 import os
-from typing import Optional
+import asyncio
+import logging
+from typing import Optional, List, Union, Tuple, Any
+from fastapi import HTTPException, status
 from google import genai
 from prompts import KISSAN_SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_FALLBACK_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+]
 
 
 class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
+        self.default_models = DEFAULT_FALLBACK_MODELS
 
         # Low-hallucination configuration settings accessed directly via genai.types
         self.config = genai.types.GenerateContentConfig(
@@ -18,34 +30,81 @@ class GeminiService:
             max_output_tokens=1500,
         )
 
-    async def generate_response(self, message: str, model: str = "gemini-2.5-flash") -> str:
+    async def generate_content_with_fallback(
+        self,
+        contents: Union[str, List[Any]],
+        config: Optional[Any] = None,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 20.0,
+    ) -> Tuple[str, str]:
         """
-        Asynchronously generates an AI text response using the configured Gemini client.
+        Asynchronously generates content iterating through fallback models on error or timeout.
+        Returns a tuple of (response_text, model_used).
         """
         if not self.client:
-            raise ValueError("Gemini API key is not configured. Set GEMINI_API_KEY in your environment.")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Gemini API key is not configured. Set GEMINI_API_KEY in your environment.",
+            )
 
-        # Non-blocking async generation call using client.aio
-        response = await self.client.aio.models.generate_content(
-            model=model,
-            contents=message,
-            config=self.config,
+        models = models_list or self.default_models
+        gen_config = config or self.config
+        last_exception = None
+
+        for model in models:
+            try:
+                logger.info("Attempting content generation with model: %s", model)
+                response = await asyncio.wait_for(
+                    self.client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=gen_config,
+                    ),
+                    timeout=timeout,
+                )
+                if response and response.text:
+                    return response.text, model
+            except asyncio.TimeoutError as e:
+                last_exception = e
+                logger.warning("Model %s timed out after %.1fs, switching to fallback...", model, timeout)
+            except Exception as e:
+                last_exception = e
+                logger.warning("Model %s failed with error: %s, switching to fallback...", model, str(e))
+
+        logger.error("All AI models (%s) failed. Last error: %s", ", ".join(models), str(last_exception))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="All AI models are currently busy. Please try again.",
         )
-        return response.text
+
+    async def generate_response(
+        self,
+        message: str,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 20.0,
+    ) -> str:
+        """
+        Asynchronously generates a text response with fallback support.
+        """
+        text, _ = await self.generate_content_with_fallback(
+            contents=message,
+            models_list=models_list,
+            timeout=timeout,
+        )
+        return text
 
     async def analyze_image(
         self,
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
         prompt: Optional[str] = None,
-        model: str = "gemini-2.5-flash",
-    ) -> str:
+        models_list: Optional[List[str]] = None,
+        timeout: float = 20.0,
+    ) -> Tuple[str, str]:
         """
-        Asynchronously analyzes an image with Gemini Vision.
+        Asynchronously analyzes an image with Gemini Vision with model fallback support.
+        Returns a tuple of (diagnosis_text, model_used).
         """
-        if not self.client:
-            raise ValueError("Gemini API key is not configured. Set GEMINI_API_KEY in your environment.")
-
         default_prompt = (
             "Diagnose the plant disease in this leaf image and provide a structured response:\n"
             "- **Disease Name**: (Identified disease or healthy)\n"
@@ -61,12 +120,11 @@ class GeminiService:
             prompt or default_prompt,
         ]
 
-        response = await self.client.aio.models.generate_content(
-            model=model,
+        return await self.generate_content_with_fallback(
             contents=contents,
-            config=self.config,
+            models_list=models_list,
+            timeout=timeout,
         )
-        return response.text
 
 
 # Global service instance for FastAPI dependency injection
