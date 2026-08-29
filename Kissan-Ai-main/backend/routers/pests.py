@@ -57,17 +57,20 @@ async def detect_pest(
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
-    # --- Save image record ---
-<<<<<<< Updated upstream
-    image = Image(user_id=current_user.id, image_url=cloudinary_result.build_url(secure=True), image_type="pest")
-=======
+    # --- Safe extraction of image URL ---
     if isinstance(cloudinary_result, dict):
         image_url = cloudinary_result.get("secure_url") or cloudinary_result.get("url")
     else:
-        image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
+        if hasattr(cloudinary_result, "build_url"):
+            try:
+                image_url = cloudinary_result.build_url(secure=True)
+            except Exception:
+                image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
+        else:
+            image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
 
+    # --- Save image record ---
     image = Image(user_id=current_user.id, image_url=image_url, image_type="pest")
->>>>>>> Stashed changes
     db.add(image)
     await db.commit()
     await db.refresh(image)
