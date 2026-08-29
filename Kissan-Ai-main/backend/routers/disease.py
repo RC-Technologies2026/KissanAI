@@ -57,8 +57,13 @@ async def detect_disease(
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
-    # --- 5. Save image record ---
-    image = Image(user_id=current_user.id, image_url=cloudinary_result["secure_url"], image_type="disease")
+    # --- 5. Safely extract image_url & Save image record ---
+    if isinstance(cloudinary_result, dict):
+        image_url = cloudinary_result.get("secure_url") or cloudinary_result.get("url")
+    else:
+        image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
+
+    image = Image(user_id=current_user.id, image_url=image_url, image_type="disease")
     db.add(image)
     await db.commit()
     await db.refresh(image)
