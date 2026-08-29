@@ -90,7 +90,6 @@ async def detect_disease(
         image_bytes=contents,
         mime_type=content_type,
         prompt=diagnosis_prompt,
-        models_list=["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
         timeout=20.0,
     )
 
