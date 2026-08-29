@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
@@ -71,9 +72,11 @@ async def upload_image(
             detail="File content does not match a valid image format",
         )
 
-    # --- Upload to Cloudinary ---
+    # --- Upload to Cloudinary (non-blocking) ---
     try:
-        result = uploader.upload_resource(contents, folder="kissanai")
+        result = await asyncio.to_thread(
+            uploader.upload_resource, contents, folder="kissanai"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -83,7 +86,7 @@ async def upload_image(
     # --- Save to database ---
     image = Image(
         user_id=current_user.id,
-        image_url=result["secure_url"],
+        image_url=result.build_url(secure=True),
         image_type=image_type,
     )
     db.add(image)
@@ -94,6 +97,6 @@ async def upload_image(
         id=image.id,
         image_url=image.image_url,
         image_type=image.image_type,
-        public_id=result.get("public_id"),
+        public_id=result.public_id,
         uploaded_at=image.uploaded_at,
     )

@@ -1,5 +1,5 @@
 # Local development only.
-# Supabase, Upstash, Cloudinary, OpenWeatherMap, Gemini are EXTERNAL services.
+# Supabase, Redis Cloud, Cloudinary, OpenWeatherMap, Gemini are EXTERNAL services.
 # This compose file just runs the FastAPI container with your .env file.
 
 services:

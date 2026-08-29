@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
@@ -50,7 +51,9 @@ async def detect_disease(
 
     # --- 4. Upload to Cloudinary ---
     try:
-        cloudinary_result = uploader.upload_resource(contents, folder="kissanai/disease")
+        cloudinary_result = await asyncio.to_thread(
+            uploader.upload_resource, contents, folder="kissanai/disease"
+        )
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 

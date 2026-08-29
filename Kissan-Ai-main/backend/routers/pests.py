@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
@@ -48,21 +49,23 @@ async def detect_pest(
             detail="File content does not match a valid image format",
         )
 
-    # --- Upload to Cloudinary ---
+    # --- Upload to Cloudinary (non-blocking) ---
     try:
-        cloudinary_result = uploader.upload_resource(contents, folder="kissanai/pest")
+        cloudinary_result = await asyncio.to_thread(
+            uploader.upload_resource, contents, folder="kissanai/pest"
+        )
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
     # --- Save image record ---
-    image = Image(user_id=current_user.id, image_url=cloudinary_result["secure_url"], image_type="pest")
+    image = Image(user_id=current_user.id, image_url=cloudinary_result.build_url(secure=True), image_type="pest")
     db.add(image)
     await db.commit()
     await db.refresh(image)
 
-    # --- Run EfficientNet-B0 inference ---
+    # --- Run EfficientNet-B0 inference (non-blocking) ---
     try:
-        pest_name, confidence = predict_pest(contents)
+        pest_name, confidence = await asyncio.to_thread(predict_pest, contents)
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Detection failed")
 

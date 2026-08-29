@@ -1,4 +1,7 @@
 import os
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -16,7 +19,26 @@ from routers.history import router as history_router
 from routers.chat import router as chat_router
 import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
-app = FastAPI(title="KissanAI API", version="0.1.0")
+logger = logging.getLogger("kissanai")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup: warm up EfficientNet model in background ---
+    async def _warm_model():
+        try:
+            from vision.efficientnet import _get_model
+            await asyncio.to_thread(_get_model)
+            logger.info("EfficientNet-B0 model loaded and ready")
+        except Exception as e:
+            logger.warning(f"Model warm-up failed (will lazy-load on first request): {e}")
+
+    asyncio.create_task(_warm_model())
+    yield
+    # --- Shutdown ---
+
+
+app = FastAPI(title="KissanAI API", version="0.1.0", lifespan=lifespan)
 
 # --- Rate limiter (slowapi) ---
 app.state.limiter = limiter

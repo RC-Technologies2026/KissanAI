@@ -1,58 +1,112 @@
 """
-Upstash Redis REST client.
+Redis Cloud client for weather cache.
 
-Uses the Upstash REST API (HTTP) instead of the RESP protocol.
-Expected REDIS_URL format: https://<host>:<port>
-REDIS_TOKEN: Upstash REST token (from Upstash console)
+Uses redis.asyncio (redis-py) with RESP protocol over TLS.
+Connects to Redis Cloud public endpoint via:
+  REDIS_HOST, REDIS_PORT, REDIS_USERNAME, REDIS_PASSWORD
 """
-import httpx
 import os
-import json
+import logging
 from typing import Optional
 
-REDIS_URL = os.getenv("REDIS_URL", "")
-REDIS_TOKEN = os.getenv("REDIS_TOKEN", "")
+from redis.asyncio import Redis
+
+logger = logging.getLogger("kissanai.redis")
+
+REDIS_HOST = os.getenv("REDIS_HOST", "")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_USERNAME = os.getenv("REDIS_USERNAME", "")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+
+# Reusable async Redis client with connection pooling
+_redis: Optional[Redis] = None
+
+
+def _reset_redis():
+    """Clear the cached client so the next call creates a fresh connection."""
+    global _redis
+    _redis = None
+
+
+def _get_redis() -> Optional[Redis]:
+    """Lazy-init shared Redis connection (created once, reused forever).
+
+    Verifies the connection with PING on first use.
+    If PING or any later operation fails, the client is reset so the
+    next call retries with a fresh connection.
+    """
+    global _redis
+    if _redis is None:
+        if not REDIS_HOST:
+            logger.warning("REDIS_HOST not set — Redis cache disabled")
+            return None
+        try:
+            _redis = Redis(
+                host=REDIS_HOST,
+                port=REDIS_PORT,
+                username=REDIS_USERNAME or None,
+                password=REDIS_PASSWORD or None,
+                ssl=False,
+                decode_responses=True,
+                socket_timeout=5.0,
+                socket_connect_timeout=5.0,
+                retry_on_timeout=True,
+                health_check_interval=30,
+            )
+            logger.info("Redis client created for %s:%s", REDIS_HOST, REDIS_PORT)
+        except Exception as e:
+            logger.error("Failed to create Redis client: %s", e)
+            return None
+
+    return _redis
+
+
+async def redis_ping() -> bool:
+    """PING Redis to verify connectivity. Returns True if pong received."""
+    client = _get_redis()
+    if client is None:
+        return False
+    try:
+        result = await client.ping()
+        if result:
+            logger.info("Redis PING successful")
+        else:
+            logger.warning("Redis PING returned unexpected value: %s", result)
+        return bool(result)
+    except Exception as e:
+        logger.error("Redis PING failed: %s", e)
+        _reset_redis()
+        return False
 
 
 async def redis_set(key: str, value: str, ex: int = 900) -> bool:
     """SET key value EX seconds — returns True on success."""
-    if not REDIS_URL:
+    client = _get_redis()
+    if client is None:
         return False
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{REDIS_URL}/SET",
-                json=[key, value, "EX", ex],
-                headers=_headers(),
-                timeout=5.0,
-            )
-            return resp.status_code == 200
-    except Exception:
+        result = await client.set(key, value, ex=ex)
+        logger.info("Redis SET OK: key=%s", key)
+        return bool(result)
+    except Exception as e:
+        logger.warning("Redis SET failed for key=%s: %s", key, e)
+        _reset_redis()
         return False
 
 
 async def redis_get(key: str) -> Optional[str]:
     """GET key — returns value string or None."""
-    if not REDIS_URL:
+    client = _get_redis()
+    if client is None:
         return None
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{REDIS_URL}/GET",
-                json=[key],
-                headers=_headers(),
-                timeout=5.0,
-            )
-            if resp.status_code == 200:
-                result = resp.json().get("result")
-                return result
-            return None
-    except Exception:
+        result = await client.get(key)
+        if result is not None:
+            logger.info("Redis GET HIT: key=%s", key)
+        else:
+            logger.info("Redis GET MISS: key=%s", key)
+        return result
+    except Exception as e:
+        logger.warning("Redis GET failed for key=%s: %s", key, e)
+        _reset_redis()
         return None
-
-
-def _headers() -> dict:
-    headers = {"Content-Type": "application/json"}
-    if REDIS_TOKEN:
-        headers["Authorization"] = f"Bearer {REDIS_TOKEN}"
-    return headers

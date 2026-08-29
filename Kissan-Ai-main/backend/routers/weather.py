@@ -1,4 +1,5 @@
 import json
+import logging
 import httpx
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -13,11 +14,23 @@ from redis_client import redis_get, redis_set
 from rate_limiter import limiter
 import os
 
+logger = logging.getLogger("kissanai.weather")
+
 router = APIRouter(prefix="/api/weather", tags=["weather"])
 
 CACHE_TTL = 900  # 15 minutes in seconds
 OPENWEATHERMAP_KEY = os.getenv("OPENWEATHERMAP_KEY", "")
 OPENWEATHERMAP_URL = "https://api.openweathermap.org/data/2.5/weather"
+
+# Reusable async HTTP client for OWM calls (connection pooling)
+_owm_client: httpx.AsyncClient | None = None
+
+
+def _get_owm_client() -> httpx.AsyncClient:
+    global _owm_client
+    if _owm_client is None or _owm_client.is_closed:
+        _owm_client = httpx.AsyncClient(timeout=10.0)
+    return _owm_client
 
 
 @router.get("/current", response_model=WeatherResponse)
@@ -41,6 +54,7 @@ async def get_current_weather(
     # --- 1. Check Redis cache ---
     cached_data = await redis_get(cache_key)
     if cached_data:
+        logger.info("Cache HIT for %s", cache_key)
         data = json.loads(cached_data)
         return WeatherResponse(
             location=location,
@@ -55,17 +69,16 @@ async def get_current_weather(
 
     # --- 2. Fetch from OpenWeatherMap ---
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                OPENWEATHERMAP_URL,
-                params={
-                    "lat": lat,
-                    "lon": lon,
-                    "appid": OPENWEATHERMAP_KEY,
-                    "units": "metric",
-                },
-                timeout=10.0,
-            )
+        client = _get_owm_client()
+        resp = await client.get(
+            OPENWEATHERMAP_URL,
+            params={
+                "lat": lat,
+                "lon": lon,
+                "appid": OPENWEATHERMAP_KEY,
+                "units": "metric",
+            },
+        )
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -98,8 +111,10 @@ async def get_current_weather(
         "cached_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # --- 4. Write to Redis cache (fire-and-forget) ---
-    await redis_set(cache_key, json.dumps(weather_data), ex=CACHE_TTL)
+    # --- 4. Write to Redis cache ---
+    redis_ok = await redis_set(cache_key, json.dumps(weather_data), ex=CACHE_TTL)
+    if not redis_ok:
+        logger.warning("Redis cache write failed for %s — weather still returned from OWM", cache_key)
 
     # --- 5. Write to PostgreSQL (persistent record) ---
     weather_record = WeatherCache(

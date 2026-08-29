@@ -1,0 +1,159 @@
+erDiagram
+    USERS ||--o{ PLOTS : owns
+    USERS ||--o{ IMAGES : uploads
+    USERS ||--o{ CHAT_HISTORY : sends
+    USERS ||--o{ ANALYSIS_HISTORY : has
+
+    PLOTS ||--o{ PLOT_CROPS : grows
+    PLOTS ||--o{ PLOT_LIVESTOCK : keeps
+    PLOTS ||--o{ IRRIGATION_GUIDANCE : receives
+    PLOTS ||--o{ IMAGES : "photo taken at"
+
+    IMAGES ||--o| DISEASE_DETECTIONS : produces
+    IMAGES ||--o| PEST_DETECTIONS : produces
+
+    DISEASE_DETECTIONS ||--o| PESTICIDE_RECOMMENDATIONS : triggers
+    PEST_DETECTIONS ||--o| INSECTICIDE_RECOMMENDATIONS : triggers
+
+    PESTICIDE_RECOMMENDATIONS }o--|| WEATHER_CACHE : "gated by"
+    INSECTICIDE_RECOMMENDATIONS }o--|| WEATHER_CACHE : "gated by"
+    PLOTS ||--o{ CROP_RECOMMENDATIONS : receives
+
+    USERS {
+        uuid id PK
+        string name
+        string email UK
+        string phone
+        string password_hash
+        string language
+        string farmer_type
+        datetime created_at
+    }
+
+    PLOTS {
+        uuid id PK
+        uuid user_id FK
+        string province
+        string district
+        string city
+        float farm_size
+        string size_unit
+        float latitude
+        float longitude
+        datetime created_at
+    }
+
+    PLOT_CROPS {
+        uuid id PK
+        uuid plot_id FK
+        string crop_name
+        string growth_stage
+        date planted_date
+    }
+
+    PLOT_LIVESTOCK {
+        uuid id PK
+        uuid plot_id FK
+        string animal_type
+        int count
+    }
+
+    IMAGES {
+        uuid id PK
+        uuid user_id FK
+        uuid plot_id FK
+        string oss_url
+        string upload_type
+        datetime created_at
+    }
+
+    DISEASE_DETECTIONS {
+        uuid id PK
+        uuid image_id FK
+        string crop_identified
+        string disease_name
+        float confidence
+        text symptoms
+        text possible_causes
+        datetime created_at
+    }
+
+    PEST_DETECTIONS {
+        uuid id PK
+        uuid image_id FK
+        string pest_name
+        float confidence
+        string affected_crop
+        text damage_description
+        datetime created_at
+    }
+
+    PESTICIDE_RECOMMENDATIONS {
+        uuid id PK
+        uuid disease_detection_id FK
+        string product_category
+        text reason
+        text application_guidance
+        text safety_precautions
+        boolean weather_blocked
+        datetime created_at
+    }
+
+    INSECTICIDE_RECOMMENDATIONS {
+        uuid id PK
+        uuid pest_detection_id FK
+        string product_category
+        text reason
+        text usage_guidance
+        text safety_precautions
+        boolean weather_blocked
+        datetime created_at
+    }
+
+    WEATHER_CACHE {
+        uuid id PK
+        string location_key
+        float temperature
+        string condition
+        int rain_probability
+        int humidity
+        float wind_speed
+        datetime fetched_at
+        datetime expires_at
+    }
+
+    IRRIGATION_GUIDANCE {
+        uuid id PK
+        uuid plot_id FK
+        string crop_name
+        text recommendation_text
+        datetime created_at
+    }
+
+    CROP_RECOMMENDATIONS {
+        uuid id PK
+        uuid plot_id FK
+        string season
+        string soil_type
+        string water_availability
+        text suggested_crops
+        text reasoning
+        datetime created_at
+    }
+
+    CHAT_HISTORY {
+        uuid id PK
+        uuid user_id FK
+        string sender
+        text message
+        string language
+        datetime created_at
+    }
+
+    ANALYSIS_HISTORY {
+        uuid id PK
+        uuid user_id FK
+        string analysis_type
+        uuid reference_id
+        datetime created_at
+    }
