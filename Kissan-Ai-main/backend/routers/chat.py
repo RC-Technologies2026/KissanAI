@@ -9,17 +9,9 @@ from models.user import User
 from schemas.chat import ChatMessageRequest, ChatMessageResponse
 from auth.utils import get_current_user
 from rate_limiter import limiter
-import google.generativeai as genai
+from services.gemini_service import gemini_service
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-else:
-    model = None
 
 
 @router.post("", response_model=ChatMessageResponse, status_code=status.HTTP_201_CREATED)
@@ -31,16 +23,13 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     # --- 1. Call Gemini API ---
-    if model is None:
+    try:
+        ai_response = await gemini_service.generate_response(body.message)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Gemini API not configured",
+            detail=str(e),
         )
-
-    try:
-        # Run sync Gemini call in thread pool to avoid blocking
-        response = await asyncio.to_thread(model.generate_content, body.message)
-        ai_response = response.text
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
