@@ -83,21 +83,24 @@ async def upload_image(
             detail="Image upload failed",
         )
 
-    # --- Save to database ---
+    # --- Safe extraction of image URL and public_id ---
     if isinstance(result, dict):
         image_url = result.get("secure_url") or result.get("url")
         public_id = result.get("public_id")
     else:
-        image_url = getattr(result, "secure_url", None) or getattr(result, "url", str(result))
+        if hasattr(result, "build_url"):
+            try:
+                image_url = result.build_url(secure=True)
+            except Exception:
+                image_url = getattr(result, "secure_url", None) or getattr(result, "url", str(result))
+        else:
+            image_url = getattr(result, "secure_url", None) or getattr(result, "url", str(result))
         public_id = getattr(result, "public_id", None)
 
+    # --- Save to database ---
     image = Image(
         user_id=current_user.id,
-<<<<<<< Updated upstream
-        image_url=result.build_url(secure=True),
-=======
         image_url=image_url,
->>>>>>> Stashed changes
         image_type=image_type,
     )
     db.add(image)
@@ -108,10 +111,6 @@ async def upload_image(
         id=image.id,
         image_url=image.image_url,
         image_type=image.image_type,
-<<<<<<< Updated upstream
-        public_id=result.public_id,
-=======
         public_id=public_id,
->>>>>>> Stashed changes
         uploaded_at=image.uploaded_at,
     )
