@@ -10,8 +10,9 @@ import socket
 import warnings
 from collections.abc import Awaitable, Generator, Iterable, Sequence
 from types import TracebackType
-from typing import Any, Callable, Self, cast
+from typing import Any, Callable, cast
 
+from ..asyncio.compatibility import asyncio_timeout
 from ..datastructures import Headers, HeadersLike, MultipleValuesError
 from ..exceptions import (
     InvalidHandshake,
@@ -156,7 +157,7 @@ class WebSocketServerProtocol(WebSocketCommonProtocol):
         """
         try:
             try:
-                async with asyncio.timeout(self.open_timeout):
+                async with asyncio_timeout(self.open_timeout):
                     await self.handshake(
                         origins=self.origins,
                         available_extensions=self.available_extensions,
@@ -759,6 +760,11 @@ class WebSocketServer:
         # Stop accepting new connections.
         self.server.close()
 
+        # Wait until all accepted connections reach connection_made() and call
+        # register(). See https://github.com/python/cpython/issues/79033 for
+        # details. This workaround can be removed when dropping Python < 3.11.
+        await asyncio.sleep(0)
+
         if close_connections:
             # Close OPEN connections with close code 1001. After server.close(),
             # handshake() closes OPENING connections with an HTTP 503 error.
@@ -861,7 +867,7 @@ class WebSocketServer:
         """
         return self.server.sockets
 
-    async def __aenter__(self) -> Self:  # pragma: no cover
+    async def __aenter__(self) -> WebSocketServer:  # pragma: no cover
         return self
 
     async def __aexit__(
@@ -1117,6 +1123,10 @@ class Serve:
         server = await self._create_server()
         self.ws_server.wrap(server)
         return self.ws_server
+
+    # yield from serve(...) - remove when dropping Python < 3.11
+
+    __iter__ = __await__
 
 
 serve = Serve

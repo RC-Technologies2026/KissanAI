@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import http
 import logging
-import os
-from typing import Any, NewType, Sequence
+from typing import TYPE_CHECKING, Any, NewType, Sequence
 
 
 __all__ = [
@@ -34,14 +33,17 @@ BytesLike = bytes | bytearray | memoryview
 DataLike = str | bytes | bytearray | memoryview
 """Types accepted where :class:`Data` is expected."""
 
-LoggerLike = logging.Logger | logging.LoggerAdapter[Any]
-"""Types accepted where a :class:`~logging.Logger` is expected."""
+if TYPE_CHECKING:
+    LoggerLike = logging.Logger | logging.LoggerAdapter[Any]
+    """Types accepted where a :class:`~logging.Logger` is expected."""
+else:  # remove this branch when dropping support for Python < 3.11
+    LoggerLike = logging.Logger | logging.LoggerAdapter
+    """Types accepted where a :class:`~logging.Logger` is expected."""
 
-PathLike = str | bytes | os.PathLike[str] | os.PathLike[bytes]
-"""Types accepted where a filesystem path is expected."""
 
 StatusLike = http.HTTPStatus | int
-"""Types accepted where an :class:`~http.HTTPStatus` is expected."""
+"""
+Types accepted where an :class:`~http.HTTPStatus` is expected."""
 
 
 Origin = NewType("Origin", str)

@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Generator, Sequence
 from types import TracebackType
 from typing import Any, Callable, cast
 
+from ..asyncio.compatibility import asyncio_timeout
 from ..datastructures import Headers, HeadersLike
 from ..exceptions import (
     InvalidHeader,
@@ -655,7 +656,7 @@ class Connect:
         return self.__await_impl__().__await__()
 
     async def __await_impl__(self) -> WebSocketClientProtocol:
-        async with asyncio.timeout(self.open_timeout):
+        async with asyncio_timeout(self.open_timeout):
             for _redirects in range(self.MAX_REDIRECTS_ALLOWED):
                 _transport, protocol = await self._create_connection()
                 try:
@@ -680,6 +681,10 @@ class Connect:
                     return protocol
             else:
                 raise SecurityError("too many redirects")
+
+    # ... = yield from connect(...) - remove when dropping Python < 3.11
+
+    __iter__ = __await__
 
 
 connect = Connect
