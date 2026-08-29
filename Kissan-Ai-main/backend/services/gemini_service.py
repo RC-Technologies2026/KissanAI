@@ -8,10 +8,11 @@ from prompts import KISSAN_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FALLBACK_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+models_to_try = [
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
 ]
 
 
@@ -19,7 +20,7 @@ class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        self.default_models = DEFAULT_FALLBACK_MODELS
+        self.default_models = models_to_try
 
         # Low-hallucination configuration settings accessed directly via genai.types
         self.config = genai.types.GenerateContentConfig(
@@ -66,10 +67,10 @@ class GeminiService:
                     return response.text, model
             except asyncio.TimeoutError as e:
                 last_exception = e
-                logger.warning("Model %s timed out after %.1fs, switching to fallback...", model, timeout)
+                logger.warning(f"Model {model} timed out after {timeout}s: {e}, falling back to next model...")
             except Exception as e:
                 last_exception = e
-                logger.warning("Model %s failed with error: %s, switching to fallback...", model, str(e))
+                logger.warning(f"Model {model} failed: {e}, falling back to next model...")
 
         logger.error("All AI models (%s) failed. Last error: %s", ", ".join(models), str(last_exception))
         raise HTTPException(
