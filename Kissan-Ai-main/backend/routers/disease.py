@@ -74,46 +74,34 @@ async def detect_disease(
     await db.commit()
     await db.refresh(image)
 
-    # --- 6. Gemini Vision Multi-Model Fallback Diagnosis ---
-    diagnosis_prompt = (
-        "You are examining an uploaded leaf/crop image for diagnosis. Provide a clear and structured report with:\n"
-        "1. **Disease Name**: (Exact identified disease or healthy)\n"
-        "2. **Symptoms Observed**: (Key visual signs on the leaf)\n"
-        "3. **Immediate Action Steps**: (First urgent steps the farmer should take)\n"
-        "4. **Treatment Options**:\n"
-        "   - **Organic Solutions**: (Bio-fungicides, natural treatments)\n"
-        "   - **Chemical Treatments & Dosages**: (Generic chemical names, exact dosage per acre/liter of water, and safety gear)\n"
-        "5. **Soil/Nutrient Recommendations**: (Relevant NPK ratios or soil care if applicable)"
-    )
-
-    diagnosis_text, model_used = await gemini_service.analyze_image(
+    # --- 6. Structured Multi-Model Fallback Leaf Diagnosis ---
+    parsed_data, formatted_markdown, model_used = await gemini_service.diagnose_leaf_image(
         image_bytes=contents,
         mime_type=content_type,
-        prompt=diagnosis_prompt,
-        timeout=20.0,
+        timeout=15.0,
     )
 
-    # Extract detected disease name from the structured diagnosis
-    disease_name = "Plant Disease Diagnosis"
-    for line in diagnosis_text.splitlines():
-        clean_line = line.strip().replace("*", "").replace("#", "")
-        if clean_line.lower().startswith("disease name:") or clean_line.lower().startswith("1. disease name:"):
-            disease_name = clean_line.split(":", 1)[1].strip()[:255]
-            break
+    # Dynamically extract disease_name and confidence_score
+    disease_name = parsed_data.get("disease_name") or "Plant Disease Diagnosis"
+    confidence_val = parsed_data.get("confidence_score", 0.95)
+    try:
+        confidence_score = float(confidence_val)
+    except (ValueError, TypeError):
+        confidence_score = 0.95
 
     # --- 7. Save detection record to database ---
     detection = DiseaseDetection(
         image_id=image.id,
         user_id=current_user.id,
-        disease_name=disease_name or "Plant Disease Diagnosis",
-        confidence_score=0.98,
+        disease_name=disease_name[:255],
+        confidence_score=confidence_score,
         model_version=model_used,
     )
     db.add(detection)
     await db.commit()
     await db.refresh(detection)
 
-    # --- 8. Return response containing full diagnosis ---
+    # --- 8. Return response containing full diagnosis & dynamic disease name ---
     return DiseaseDetectionResponse(
         id=detection.id,
         image_id=image.id,
@@ -121,5 +109,5 @@ async def detect_disease(
         confidence_score=detection.confidence_score,
         model_version=detection.model_version,
         detected_at=detection.detected_at,
-        diagnosis=diagnosis_text,
+        diagnosis=formatted_markdown,
     )

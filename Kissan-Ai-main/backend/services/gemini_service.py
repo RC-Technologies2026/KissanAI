@@ -1,7 +1,9 @@
 import os
+import json
 import asyncio
 import logging
-from typing import Optional, List, Union, Tuple, Any
+import re
+from typing import Optional, List, Union, Tuple, Any, Dict
 from fastapi import HTTPException, status
 from google import genai
 from prompts import KISSAN_SYSTEM_PROMPT
@@ -9,11 +11,34 @@ from prompts import KISSAN_SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 models_to_try = [
-    "gemini-3.7-flash",
     "gemini-3.6-flash",
+    "gemini-3.7-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-pro-latest",
 ]
+
+DEFAULT_DIAGNOSIS_PROMPT = """Analyze this plant/leaf image and provide a concise, high-accuracy diagnosis (keep response under 150-200 words).
+You MUST respond with a valid JSON object matching this exact schema:
+{
+  "disease_name": "Exact short disease name (e.g. Early Blight, Powdery Mildew, or Healthy Plant)",
+  "confidence_score": 0.95,
+  "symptoms": [
+    "Short symptom bullet point 1",
+    "Short symptom bullet point 2"
+  ],
+  "treatment": [
+    "Direct organic/cultural treatment step",
+    "Exact chemical name, dosage per acre/liter, and safety gear"
+  ]
+}"""
 
 
 class GeminiService:
@@ -36,7 +61,7 @@ class GeminiService:
         contents: Union[str, List[Any]],
         config: Optional[Any] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 20.0,
+        timeout: float = 15.0,
     ) -> Tuple[str, str]:
         """
         Asynchronously generates content iterating through fallback models on error or timeout.
@@ -64,7 +89,7 @@ class GeminiService:
                     timeout=timeout,
                 )
                 if response and response.text:
-                    return response.text, model
+                    return response.text.strip(), model
             except asyncio.TimeoutError as e:
                 last_exception = e
                 logger.warning(f"Model {model} timed out after {timeout}s: {e}, falling back to next model...")
@@ -82,11 +107,9 @@ class GeminiService:
         self,
         message: str,
         models_list: Optional[List[str]] = None,
-        timeout: float = 20.0,
+        timeout: float = 15.0,
     ) -> str:
-        """
-        Asynchronously generates a text response with fallback support.
-        """
+        """Asynchronously generates a text response with fallback support."""
         text, _ = await self.generate_content_with_fallback(
             contents=message,
             models_list=models_list,
@@ -94,39 +117,65 @@ class GeminiService:
         )
         return text
 
-    async def analyze_image(
+    async def diagnose_leaf_image(
         self,
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 20.0,
-    ) -> Tuple[str, str]:
+        timeout: float = 15.0,
+    ) -> Tuple[Dict[str, Any], str, str]:
         """
-        Asynchronously analyzes an image with Gemini Vision with model fallback support.
-        Returns a tuple of (diagnosis_text, model_used).
+        Diagnoses a leaf image and returns (parsed_json_dict, formatted_markdown, model_used).
         """
-        default_prompt = (
-            "Diagnose the plant disease in this leaf image and provide a structured response:\n"
-            "- **Disease Name**: (Identified disease or healthy)\n"
-            "- **Symptoms Observed**: (Key visual signs on the leaf)\n"
-            "- **Immediate Action Steps**: (What the farmer should do first)\n"
-            "- **Treatment Options**:\n"
-            "  - **Organic Solutions**: (Bio-fungicides, natural remedies)\n"
-            "  - **Chemical Treatments & Dosages**: (Generic chemical names, exact dosage per acre/liter, safety gear)"
-        )
-
         contents = [
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            prompt or default_prompt,
+            prompt or DEFAULT_DIAGNOSIS_PROMPT,
         ]
 
-        return await self.generate_content_with_fallback(
+        raw_response, model_used = await self.generate_content_with_fallback(
             contents=contents,
             models_list=models_list,
             timeout=timeout,
         )
 
+        # Parse JSON output from Gemini response
+        parsed_data: Dict[str, Any] = {}
+        try:
+            # Strip markdown json block wrappers if present
+            cleaned_json = raw_response
+            if "```" in cleaned_json:
+                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_json)
+                if match:
+                    cleaned_json = match.group(1)
+            parsed_data = json.loads(cleaned_json)
+        except Exception as json_err:
+            logger.warning("Failed to parse direct JSON from Gemini: %s. Using text extraction.", json_err)
+            # Fallback regex extraction for disease_name
+            disease_match = re.search(r'"disease_name"\s*:\s*"([^"]+)"', raw_response) or re.search(
+                r"(?:Disease Name|Diagnosis)\s*:\s*([^\n\r]+)", raw_response, re.IGNORECASE
+            )
+            parsed_data["disease_name"] = disease_match.group(1).strip() if disease_match else "Plant Disease Diagnosis"
+            parsed_data["confidence_score"] = 0.95
+            parsed_data["symptoms"] = ["See detailed diagnosis below."]
+            parsed_data["treatment"] = [raw_response]
 
-# Global service instance for FastAPI dependency injection
+        # Construct readable markdown for UI display
+        disease_name = parsed_data.get("disease_name", "Plant Disease Diagnosis")
+        symptoms = parsed_data.get("symptoms", [])
+        treatments = parsed_data.get("treatment", [])
+
+        symptoms_md = "\n".join(f"- {s}" for s in symptoms) if isinstance(symptoms, list) else str(symptoms)
+        treatment_md = "\n".join(f"- {t}" for t in treatments) if isinstance(treatments, list) else str(treatments)
+
+        formatted_markdown = (
+            f"### **Diagnosis**: {disease_name}\n\n"
+            f"#### **Observed Symptoms**:\n{symptoms_md}\n\n"
+            f"#### **Recommended Treatments & Action Steps**:\n{treatment_md}"
+        )
+
+        return parsed_data, formatted_markdown, model_used
+
+
+# Global singleton instance for FastAPI dependency injection
 gemini_service = GeminiService()
