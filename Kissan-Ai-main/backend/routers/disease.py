@@ -49,7 +49,7 @@ async def detect_disease(
             detail="File content does not match a valid image format",
         )
 
-    # --- 4. Upload to Cloudinary ---
+    # --- 4. Upload to Cloudinary (non-blocking) ---
     try:
         cloudinary_result = await asyncio.to_thread(
             uploader.upload_resource, contents, folder="kissanai/disease"
@@ -61,14 +61,20 @@ async def detect_disease(
     if isinstance(cloudinary_result, dict):
         image_url = cloudinary_result.get("secure_url") or cloudinary_result.get("url")
     else:
-        image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
+        if hasattr(cloudinary_result, "build_url"):
+            try:
+                image_url = cloudinary_result.build_url(secure=True)
+            except Exception:
+                image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
+        else:
+            image_url = getattr(cloudinary_result, "secure_url", None) or getattr(cloudinary_result, "url", str(cloudinary_result))
 
     image = Image(user_id=current_user.id, image_url=image_url, image_type="disease")
     db.add(image)
     await db.commit()
     await db.refresh(image)
 
-    # --- 6. Direct Gemini 2.5 Flash Vision Diagnosis ---
+    # --- 6. Gemini Vision Multi-Model Fallback Diagnosis ---
     diagnosis_prompt = (
         "You are examining an uploaded leaf/crop image for diagnosis. Provide a clear and structured report with:\n"
         "1. **Disease Name**: (Exact identified disease or healthy)\n"
@@ -80,47 +86,35 @@ async def detect_disease(
         "5. **Soil/Nutrient Recommendations**: (Relevant NPK ratios or soil care if applicable)"
     )
 
-    try:
-        diagnosis_text = await gemini_service.analyze_image(
-            image_bytes=contents,
-            mime_type=content_type,
-            prompt=diagnosis_prompt,
-            model="gemini-2.5-flash",
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gemini Vision API error: {str(e)}",
-        )
+    diagnosis_text, model_used = await gemini_service.analyze_image(
+        image_bytes=contents,
+        mime_type=content_type,
+        prompt=diagnosis_prompt,
+        models_list=["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+        timeout=20.0,
+    )
 
-    # Extract first line or headline disease name if possible
-    disease_name = "Gemini Diagnosis"
+    # Extract detected disease name from the structured diagnosis
+    disease_name = "Plant Disease Diagnosis"
     for line in diagnosis_text.splitlines():
         clean_line = line.strip().replace("*", "").replace("#", "")
-        if clean_line.lower().startswith("disease name:"):
-            disease_name = clean_line.split(":", 1)[1].strip()[:255]
-            break
-        elif clean_line.lower().startswith("1. disease name:"):
+        if clean_line.lower().startswith("disease name:") or clean_line.lower().startswith("1. disease name:"):
             disease_name = clean_line.split(":", 1)[1].strip()[:255]
             break
 
-    # --- 7. Save detection to database (bypassing low-confidence fallback) ---
+    # --- 7. Save detection record to database ---
     detection = DiseaseDetection(
         image_id=image.id,
         user_id=current_user.id,
         disease_name=disease_name or "Plant Disease Diagnosis",
         confidence_score=0.98,
-        model_version="gemini-2.5-flash",
+        model_version=model_used,
     )
     db.add(detection)
     await db.commit()
     await db.refresh(detection)
 
+    # --- 8. Return response containing full diagnosis ---
     return DiseaseDetectionResponse(
         id=detection.id,
         image_id=image.id,
