@@ -51,6 +51,31 @@ You MUST respond with a valid JSON object matching this exact schema:
 }}"""
 
 
+def build_pest_prompt(language: str = "english") -> str:
+    """Builds a localized prompt for pest identification in the requested language."""
+    lang = (language or "english").strip().lower()
+    return f"""Analyze this crop image for pest identification. Return the entire response strictly in the requested language: {lang}.
+- If language is 'punjabi', write in clear Punjabi (Shahmukhi / Roman Punjabi).
+- If 'urdu', write in Urdu (or Roman Urdu as requested).
+- If 'english', write in English.
+- If any other language is requested, write strictly in that requested language.
+
+Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
+You MUST respond with a valid JSON object matching this exact schema:
+{{
+  "pest_name": "Exact short pest name in English and {lang} (e.g. Cotton Bug / کپاس کا کیڑا)",
+  "confidence_score": 0.95,
+  "damage_symptoms": [
+    "Short damage symptom bullet point 1 in {lang}",
+    "Short damage symptom bullet point 2 in {lang}"
+  ],
+  "recommended_pesticide": [
+    "Recommended organic/biological spray step in {lang}",
+    "Exact chemical pesticide name, dosage per acre/liter of water, and safety gear in {lang}"
+  ]
+}}"""
+
+
 class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
@@ -185,6 +210,67 @@ class GeminiService:
             f"### **Diagnosis**: {disease_name}\n\n"
             f"#### **Symptoms**:\n{symptoms_md}\n\n"
             f"#### **Treatment & Management**:\n{treatment_md}"
+        )
+
+        return parsed_data, formatted_markdown, model_used
+
+    async def diagnose_pest_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        language: str = "english",
+        prompt: Optional[str] = None,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 15.0,
+    ) -> Tuple[Dict[str, Any], str, str]:
+        """
+        Identifies a pest in a crop image in the requested language.
+        Returns (parsed_json_dict, formatted_markdown, model_used).
+        """
+        active_prompt = prompt or build_pest_prompt(language=language)
+
+        contents = [
+            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            active_prompt,
+        ]
+
+        raw_response, model_used = await self.generate_content_with_fallback(
+            contents=contents,
+            models_list=models_list,
+            timeout=timeout,
+        )
+
+        # Parse JSON output from Gemini response
+        parsed_data: Dict[str, Any] = {}
+        try:
+            cleaned_json = raw_response
+            if "```" in cleaned_json:
+                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_json)
+                if match:
+                    cleaned_json = match.group(1)
+            parsed_data = json.loads(cleaned_json)
+        except Exception as json_err:
+            logger.warning("Failed to parse pest JSON from Gemini: %s. Using text extraction.", json_err)
+            pest_match = re.search(r'"pest_name"\s*:\s*"([^"]+)"', raw_response) or re.search(
+                r"(?:Pest Name|Insect|کیڑا|ਕੀੜਾ)\s*:\s*([^\n\r]+)", raw_response, re.IGNORECASE
+            )
+            parsed_data["pest_name"] = pest_match.group(1).strip() if pest_match else "Pest Identification"
+            parsed_data["confidence_score"] = 0.95
+            parsed_data["damage_symptoms"] = ["See detailed report below."]
+            parsed_data["recommended_pesticide"] = [raw_response]
+
+        # Construct readable localized markdown for UI display
+        pest_name = parsed_data.get("pest_name", "Pest Identification")
+        damage_symptoms = parsed_data.get("damage_symptoms", [])
+        pesticides = parsed_data.get("recommended_pesticide", [])
+
+        symptoms_md = "\n".join(f"- {s}" for s in damage_symptoms) if isinstance(damage_symptoms, list) else str(damage_symptoms)
+        pesticide_md = "\n".join(f"- {p}" for p in pesticides) if isinstance(pesticides, list) else str(pesticides)
+
+        formatted_markdown = (
+            f"### **Identified Pest**: {pest_name}\n\n"
+            f"#### **Damage Symptoms**:\n{symptoms_md}\n\n"
+            f"#### **Recommended Pesticide & Treatment**:\n{pesticide_md}"
         )
 
         return parsed_data, formatted_markdown, model_used
