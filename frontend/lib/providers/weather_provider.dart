@@ -128,7 +128,7 @@ class WeatherState {
       );
 }
 
-/// Weather provider using OpenWeatherMap API.
+/// Weather provider using backend API.
 class WeatherNotifier extends StateNotifier<WeatherState> {
   WeatherNotifier() : super(const WeatherState()) {
     refresh();
@@ -145,45 +145,40 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       final city = storage.farmCity ?? 'Faisalabad';
       final province = storage.farmProvince ?? 'Punjab';
 
-      // City coordinates mapping for Pakistan
-      final coords = _getCityCoordinates(city);
-      final lat = coords.$1;
-      final lon = coords.$2;
+      // Call backend weather endpoint
+      final response = await _dio.get(
+        '${ApiConstants.baseUrl}/api/weather/current',
+        queryParameters: {
+          'city': city,
+          'province': province,
+        },
+      );
 
-      const apiKey = ApiConstants.openWeatherApiKey;
+      final data = response.data;
 
-      // Fetch current weather and 5-day forecast in parallel
-      final results = await Future.wait([
-        _fetchCurrentWeather(lat, lon, apiKey),
-        _fetchForecast(lat, lon, apiKey),
-      ]);
+      // Parse current weather from backend response
+      final current = data['current'] as Map<String, dynamic>? ?? data;
+      final main = current['main'] as Map<String, dynamic>? ?? {};
+      final weather = (current['weather'] as List?)?.first as Map<String, dynamic>? ?? {};
+      final wind = current['wind'] as Map<String, dynamic>? ?? {};
 
-      final currentData = results[0];
-      final forecastData = results[1];
-
-      // Parse current weather
-      final current = currentData;
-      final main = current['main'] as Map<String, dynamic>;
-      final weather = (current['weather'] as List).first as Map<String, dynamic>;
-      final wind = current['wind'] as Map<String, dynamic>;
-
-      // Parse forecast
-      final forecastList = forecastData['list'] as List;
-      final hourly = _parseHourlyForecast(forecastList);
-      final daily = _parseDailyForecast(forecastList);
+      // Parse forecast if available
+      final forecastList = data['forecast']?['list'] as List? ?? [];
+      final hourly = forecastList.isNotEmpty ? _parseHourlyForecast(forecastList) : <HourlyForecast>[];
+      final daily = forecastList.isNotEmpty ? _parseDailyForecast(forecastList) : <DailyForecast>[];
 
       state = WeatherState(
-        temperatureC: (main['temp'] as num).round(),
-        feelsLike: (main['feels_like'] as num).round(),
-        rainProbability: ((current['clouds']?['all'] ?? 20) as num).round(),
-        windSpeedKmh: (((wind['speed'] as num) * 3.6).round()), // m/s to km/h
-        humidity: (main['humidity'] as num).round(),
-        uvIndex: 6, // Not in free API, using default
+        temperatureC: (main['temp'] as num?)?.round() ?? 32,
+        feelsLike: (main['feels_like'] as num?)?.round() ?? 35,
+        rainProbability: ((current['clouds']?['all'] ?? data['rain_probability'] ?? 20) as num).round(),
+        windSpeedKmh: (((wind['speed'] as num?) ?? 2.2) * 3.6).round(), // m/s to km/h
+        humidity: (main['humidity'] as num?)?.round() ?? 65,
+        uvIndex: (data['uv_index'] as num?)?.round() ?? 6,
         visibility: ((current['visibility'] as num? ?? 10000) ~/ 1000),
-        pressure: (main['pressure'] as num).round(),
-        dewPoint: (main['temp'] as num).round() - ((100 - (main['humidity'] as num)) ~/ 5),
+        pressure: (main['pressure'] as num?)?.round() ?? 1013,
+        dewPoint: (main['temp'] as num?)?.round() ?? 22,
         location: '$city, $province',
-        condition: weather['main'] as String? ?? 'Clear',
+        condition: weather['main'] as String? ?? data['condition'] ?? 'Clear',
         conditionIcon: _getWeatherIcon(weather['id'] as int? ?? 800),
         loading: false,
         hourlyForecast: hourly,
@@ -195,34 +190,6 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
         error: 'Failed to fetch weather: $e',
       );
     }
-  }
-
-  Future<Map<String, dynamic>> _fetchCurrentWeather(
-      double lat, double lon, String apiKey) async {
-    final response = await _dio.get(
-      '${ApiConstants.openWeatherBaseUrl}/weather',
-      queryParameters: {
-        'lat': lat,
-        'lon': lon,
-        'appid': apiKey,
-        'units': 'metric',
-      },
-    );
-    return response.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> _fetchForecast(
-      double lat, double lon, String apiKey) async {
-    final response = await _dio.get(
-      '${ApiConstants.openWeatherBaseUrl}/forecast',
-      queryParameters: {
-        'lat': lat,
-        'lon': lon,
-        'appid': apiKey,
-        'units': 'metric',
-      },
-    );
-    return response.data as Map<String, dynamic>;
   }
 
   List<HourlyForecast> _parseHourlyForecast(List forecastList) {
@@ -332,58 +299,6 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     if (weatherCode == 802) return Icons.cloud; // Scattered clouds
     if (weatherCode >= 803) return Icons.cloud; // Broken/overcast clouds
     return Icons.cloud;
-  }
-
-  /// Get latitude and longitude for a Pakistani city.
-  (double, double) _getCityCoordinates(String city) {
-    // Major city coordinates
-    const cityCoords = <String, (double, double)>{
-      'Karachi': (24.8607, 67.0011),
-      'Lahore': (31.5204, 74.3587),
-      'Islamabad': (33.6844, 73.0479),
-      'Rawalpindi': (33.5651, 73.0169),
-      'Faisalabad': (31.4504, 73.1350),
-      'Multan': (30.1575, 71.5249),
-      'Peshawar': (34.0151, 71.5249),
-      'Quetta': (30.1798, 66.9750),
-      'Hyderabad': (25.3960, 68.3578),
-      'Sialkot': (32.4945, 74.5229),
-      'Gujranwala': (32.1877, 74.1945),
-      'Bahawalpur': (29.3545, 71.6911),
-      'Sargodha': (32.0859, 72.6738),
-      'Sukkur': (27.7032, 68.8589),
-      'Larkana': (27.5590, 68.2104),
-      'Mardan': (34.1976, 72.0490),
-      'Mingora': (34.7795, 72.3617),
-      'Sheikhupura': (31.7133, 73.9419),
-      'Muzaffargarh': (30.0736, 70.5867),
-      'Sahiwal': (30.6612, 73.1020),
-      'Okara': (30.8103, 73.4528),
-      'Jhang': (31.3053, 72.3253),
-      'Gujrat': (32.5742, 74.0754),
-      'Kasur': (31.1186, 74.4500),
-      'Rahim Yar Khan': (28.4213, 70.3049),
-      'Dera Ghazi Khan': (30.0458, 70.6403),
-      'Nawabshah': (26.2395, 68.4089),
-      'Mirpur Khas': (25.5276, 69.0095),
-      'Chiniot': (31.7209, 72.9788),
-      'Jhelum': (32.9345, 73.7311),
-      'Abbottabad': (34.1694, 73.2134),
-      'Muzaffarabad': (34.3700, 73.4700),
-      'Gilgit': (35.9186, 74.3124),
-      'Skardu': (35.2975, 75.6333),
-    };
-
-    // Try to find matching city
-    for (final entry in cityCoords.entries) {
-      if (city.toLowerCase().contains(entry.key.toLowerCase()) ||
-          entry.key.toLowerCase().contains(city.toLowerCase())) {
-        return entry.value;
-      }
-    }
-
-    // Default to Faisalabad
-    return (31.4504, 73.1350);
   }
 
   void setMock({
