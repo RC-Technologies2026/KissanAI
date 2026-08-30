@@ -1,0 +1,392 @@
+/// App translations — Urdu, English, Punjabi, Sindhi, Pashto, Balochi.
+/// Keys are dot-separated paths for nested access.
+class AppTranslations {
+  AppTranslations._();
+
+  static const Map<String, Map<String, String>> translations = {
+    'Urdu': _ur,
+    'English': _en,
+    'Punjabi': _pa,
+    'Sindhi': _sd,
+    'Pashto': _ps,
+    'Balochi': _bal,
+  };
+
+  static String t(String key, String language) {
+    return translations[language]?[key] ?? translations['English']?[key] ?? key;
+  }
+
+  static const Map<String, String> _en = {
+    // General
+    'app.name': 'Kisan AI',
+    'app.tagline': 'Your AI Agricultural Assistant',
+    'app.subtitle': 'Farming guidance in your language.',
+    'common.save': 'Save',
+    'common.cancel': 'Cancel',
+    'common.delete': 'Delete',
+    'common.edit': 'Edit',
+    'common.back': 'Back',
+    'common.next': 'Next',
+    'common.done': 'Done',
+    'common.loading': 'Loading...',
+    'common.error': 'Error',
+    'common.success': 'Success',
+    'common.close': 'Close',
+    'common.search': 'Search',
+    'common.yes': 'Yes',
+    'common.no': 'No',
+    'common.ok': 'OK',
+
+    // Welcome
+    'welcome.get_started': 'Get Started',
+    'welcome.skip_demo': 'Skip and explore demo',
+    'welcome.title': 'Kisan AI',
+    'welcome.subtitle': 'Your AI Agricultural Assistant',
+    'welcome.tagline': 'Farming guidance in your language,\ncrop disease detection, and smart recommendations.',
+
+    // Auth
+    'auth.create_account': 'Create Account',
+    'auth.signup_hint': 'Sign up to get started with smart farming.',
+    'auth.full_name': 'Full Name',
+    'auth.name_hint': 'Enter your full name',
+    'auth.phone': 'Phone Number',
+    'auth.phone_hint': '03XX XXXXXXX',
+    'auth.email': 'Email',
+    'auth.email_hint': 'you@example.com',
+    'auth.password': 'Password',
+    'auth.password_hint': 'Min 8 characters',
+    'auth.login': 'Log In',
+    'auth.login_hint': 'Welcome back! Log in to continue.',
+    'auth.have_account': 'Already have an account? Log in',
+    'auth.no_account': "Don't have an account? Sign up",
+    'auth.forgot_password': 'Forgot Password?',
+    'auth.required': 'Required',
+    'auth.valid_email': 'Enter a valid email',
+    'auth.valid_phone': 'Enter a valid phone number',
+    'auth.password_length': 'Password must be at least 8 characters',
+
+    // Dashboard
+    'dashboard.greeting': 'Assalam-o-Alaikum',
+    'dashboard.your_farm': 'Your farm today',
+    'dashboard.quick_actions': 'Quick Actions',
+    'dashboard.disease_detection': 'Disease\nDetection',
+    'dashboard.pest_detection': 'Pest\nDetection',
+    'dashboard.crop_recommendation': 'Crop\nRecommendation',
+    'dashboard.irrigation_guide': 'Irrigation\nGuide',
+    'dashboard.ask_kisan': 'Ask\nKisan AI',
+    'dashboard.view_history': 'View\nHistory',
+
+    // Drawer
+    'drawer.dashboard': 'Dashboard',
+    'drawer.weather': 'Weather',
+    'drawer.disease': 'Crop Disease Detection',
+    'drawer.pest': 'Pest & Insect Detection',
+    'drawer.pesticide': 'Pesticide Recommendation',
+    'drawer.insecticide': 'Insecticide Recommendation',
+    'drawer.crop_rec': 'Crop Recommendation',
+    'drawer.irrigation': 'Irrigation Guide',
+    'drawer.chat': 'Ask Kisan AI',
+    'drawer.history': 'History',
+    'drawer.profile': 'Profile',
+    'drawer.settings': 'Settings',
+    'drawer.logout': 'Logout',
+
+    // Weather
+    'weather.title': 'Weather',
+    'weather.details': 'Weather Details',
+    'weather.hourly': 'Hourly Forecast',
+    'weather.daily': '7-Day Forecast',
+    'weather.feels_like': 'Feels Like',
+    'weather.humidity': 'Humidity',
+    'weather.wind': 'Wind',
+    'weather.uv': 'UV Index',
+    'weather.visibility': 'Visibility',
+    'weather.pressure': 'Pressure',
+    'weather.today': 'Today',
+    'weather.now': 'Now',
+    'weather.no_alerts': 'No major weather alerts',
+    'weather.high_wind': 'High wind — spraying not recommended today',
+    'weather.rain_expected': 'Rain expected — irrigation may not be needed today',
+    'weather.refreshing': 'Refreshing weather...',
+
+    // Profile
+    'profile.title': 'Profile',
+    'profile.edit': 'Edit Profile',
+    'profile.phone': 'Phone',
+    'profile.email': 'Email',
+    'profile.crops': 'Crops',
+    'profile.livestock': 'Livestock',
+    'profile.farm_size': 'Farm Size',
+    'profile.farm_name': 'Farm Name',
+    'profile.farmer_type': 'Farmer Type',
+    'profile.location': 'Location',
+    'profile.farm_location': 'Farm Location (GPS or Address)',
+
+    // Edit Profile
+    'edit_profile.title': 'Edit Profile',
+    'edit_profile.save': 'Save Changes',
+    'edit_profile.personal_info': 'Personal Information',
+    'edit_profile.farm_details': 'Farm Details',
+    'edit_profile.farm_name_hint': 'e.g., Green Valley Farm',
+    'edit_profile.updated': 'Profile updated successfully',
+
+    // Settings
+    'settings.title': 'Settings',
+    'settings.language': 'Language',
+    'settings.notifications': 'Notifications',
+    'settings.push_notifications': 'Push Notifications',
+    'settings.weather_alerts': 'Weather alerts & crop reminders',
+
+    // Farm
+    'farm.province': 'Province',
+    'farm.district': 'District',
+    'farm.city': 'City / Tehsil',
+    'farm.size': 'Farm Size',
+    'farm.acres': 'Acres',
+    'farm.kanal': 'Kanal',
+    'farm.hectares': 'Hectares',
+    'farm.new_farmer': 'New Farmer',
+    'farm.experienced': 'Experienced Farmer',
+    'farm.commercial': 'Commercial Farmer',
+
+    // Detection
+    'detection.take_photo': 'Take Photo',
+    'detection.choose_gallery': 'Choose from Gallery',
+    'detection.analyzing': 'Analyzing...',
+    'detection.result': 'Result',
+    'detection.confidence': 'Confidence',
+    'detection.recommendation': 'Recommendation',
+    'detection.retake': 'Retake',
+    'detection.capture_crop': 'Capture the affected crop leaf',
+    'detection.capture_pest': 'Capture the pest or affected area',
+    'detection.disease_title': 'Crop Disease Detection',
+    'detection.pest_title': 'Pest & Insect Detection',
+
+    // Chat
+    'chat.title': 'Ask Kisan AI',
+    'chat.hint': 'Ask about crops, weather, diseases...',
+    'chat.send': 'Send',
+    'chat.welcome': 'Assalam-o-Alaikum! I\'m your Kisan AI assistant. Ask me anything about farming.',
+
+    // History
+    'history.title': 'History',
+    'history.empty': 'No history yet',
+    'history.empty_hint': 'Your detection results will appear here.',
+
+    // Irrigation
+    'irrigation.title': 'Irrigation Guide',
+    'irrigation.schedule': 'Schedule',
+    'irrigation.amount': 'Water Amount',
+    'irrigation.method': 'Method',
+    'irrigation.tips': 'Tips',
+  };
+
+  static const Map<String, String> _ur = {
+    // General
+    'app.name': 'کسان AI',
+    'app.tagline': 'آپ کا زرعی AI ساتھی',
+    'app.subtitle': 'آپ کی زبان میں زرعی رہنمائی۔',
+    'common.save': 'محفوظ کریں',
+    'common.cancel': 'منسوخ',
+    'common.delete': 'حذف',
+    'common.edit': 'ترمیم',
+    'common.back': 'واپس',
+    'common.next': 'اگلا',
+    'common.done': 'ہو گیا',
+    'common.loading': 'لوڈ ہو رہا ہے...',
+    'common.error': 'خرابی',
+    'common.success': 'کامیابی',
+    'common.close': 'بند کریں',
+    'common.search': 'تلاش',
+    'common.yes': 'ہاں',
+    'common.no': 'نہیں',
+    'common.ok': 'ٹھیک ہے',
+
+    // Welcome
+    'welcome.get_started': 'شروع کریں',
+    'welcome.skip_demo': 'ڈیمو دیکھیں',
+    'welcome.title': 'کسان AI',
+    'welcome.subtitle': 'آپ کا زرعی AI ساتھی',
+    'welcome.tagline': 'آپ کی زبان میں زرعی رہنمائی،\nفصل کی بیماری کی شناخت، اور ہوشمند سفارشات۔',
+
+    // Auth
+    'auth.create_account': 'اکاؤنٹ بنائیں',
+    'auth.signup_hint': 'ہوشمند کھیتی کے لیے سائن اپ کریں۔',
+    'auth.full_name': 'پورا نام',
+    'auth.name_hint': 'اپنا پورا نام درج کریں',
+    'auth.phone': 'فون نمبر',
+    'auth.phone_hint': '03XX XXXXXXX',
+    'auth.email': 'ای میل',
+    'auth.email_hint': 'you@example.com',
+    'auth.password': 'پاس ورڈ',
+    'auth.password_hint': 'کم از کم 8 حروف',
+    'auth.login': 'لاگ ان',
+    'auth.login_hint': 'خوش آمدید! جاری رکھنے کے لیے لاگ ان کریں۔',
+    'auth.have_account': 'پہلے سے اکاؤنٹ ہے؟ لاگ ان کریں',
+    'auth.no_account': 'اکاؤنٹ نہیں؟ سائن اپ کریں',
+    'auth.forgot_password': 'پاس ورڈ بھول گئے؟',
+    'auth.required': 'ضروری ہے',
+    'auth.valid_email': 'درست ای میل درج کریں',
+    'auth.valid_phone': 'درست فون نمبر درج کریں',
+    'auth.password_length': 'پاس ورڈ کم از کم 8 حروف کا ہونا چاہیے',
+
+    // Dashboard
+    'dashboard.greeting': 'السلام علیکم',
+    'dashboard.your_farm': 'آج آپ کا کھیت',
+    'dashboard.quick_actions': 'فوری اقدامات',
+    'dashboard.disease_detection': 'بیماری\nکی شناخت',
+    'dashboard.pest_detection': 'کیڑوں کی\nشناخت',
+    'dashboard.crop_recommendation': 'فصل کی\nسفارش',
+    'dashboard.irrigation_guide': 'آبپاشی\nرہنمائی',
+    'dashboard.ask_kisan': 'کسان AI\nسے پوچھیں',
+    'dashboard.view_history': 'تاریخ\nدیکھیں',
+
+    // Drawer
+    'drawer.dashboard': 'ڈیش بورڈ',
+    'drawer.weather': 'موسم',
+    'drawer.disease': 'فصل کی بیماری کی شناخت',
+    'drawer.pest': 'کیڑوں اور حشرات کی شناخت',
+    'drawer.pesticide': 'کیڑے مار دوا کی سفارش',
+    'drawer.insecticide': 'حشر کش دوا کی سفارش',
+    'drawer.crop_rec': 'فصل کی سفارش',
+    'drawer.irrigation': 'آبپاشی رہنمائی',
+    'drawer.chat': 'کسان AI سے پوچھیں',
+    'drawer.history': 'تاریخ',
+    'drawer.profile': 'پروفائل',
+    'drawer.settings': 'ترتیبات',
+    'drawer.logout': 'لاگ آؤٹ',
+
+    // Weather
+    'weather.title': 'موسم',
+    'weather.details': 'موسم کی تفصیلات',
+    'weather.hourly': 'گھنٹہ وار پیش گوئی',
+    'weather.daily': '7 دن کی پیش گوئی',
+    'weather.feels_like': 'محسوس ہوتا ہے',
+    'weather.humidity': 'نمی',
+    'weather.wind': 'ہوا',
+    'weather.uv': 'یو وی انڈیکس',
+    'weather.visibility': 'نظر',
+    'weather.pressure': 'دباؤ',
+    'weather.today': 'آج',
+    'weather.now': 'ابھی',
+    'weather.no_alerts': 'کوئی بڑی موسمیاتی انتباہ نہیں',
+    'weather.high_wind': 'تیز ہوا — آج سپرے کی سفارش نہیں',
+    'weather.rain_expected': 'بارش متوقع — آبپاشی کی ضرورت نہیں ہو سکتی',
+    'weather.refreshing': 'موسم تازہ ہو رہا ہے...',
+
+    // Profile
+    'profile.title': 'پروفائل',
+    'profile.edit': 'پروفائل ترمیم',
+    'profile.phone': 'فون',
+    'profile.email': 'ای میل',
+    'profile.crops': 'فصلیں',
+    'profile.livestock': 'مویشی',
+    'profile.farm_size': 'کھیت کا سائز',
+    'profile.farm_name': 'کھیت کا نام',
+    'profile.farmer_type': 'کسان کی قسم',
+    'profile.location': 'مقام',
+    'profile.farm_location': 'کھیت کا مقام (GPS یا پتہ)',
+
+    // Edit Profile
+    'edit_profile.title': 'پروفائل ترمیم',
+    'edit_profile.save': 'تبدیلیاں محفوظ کریں',
+    'edit_profile.personal_info': 'ذاتی معلومات',
+    'edit_profile.farm_details': 'کھیت کی تفصیلات',
+    'edit_profile.farm_name_hint': 'مثلاً، سبز وادی فارم',
+    'edit_profile.updated': 'پروفائل کامیابی سے اپ ڈیٹ ہو گیا',
+
+    // Settings
+    'settings.title': 'ترتیبات',
+    'settings.language': 'زبان',
+    'settings.notifications': 'اطلاعات',
+    'settings.push_notifications': 'پش اطلاعات',
+    'settings.weather_alerts': 'موسمی انتباہ اور فصل کی یاد دہانیاں',
+
+    // Farm
+    'farm.province': 'صوبہ',
+    'farm.district': 'ضلع',
+    'farm.city': 'شہر / تحصيل',
+    'farm.size': 'کھیت کا سائز',
+    'farm.acres': 'ایکڑ',
+    'farm.kanal': 'کنال',
+    'farm.hectares': 'ہیکٹر',
+    'farm.new_farmer': 'نیا کسان',
+    'farm.experienced': 'تجربہ کار کسان',
+    'farm.commercial': 'تجارتی کسان',
+
+    // Detection
+    'detection.take_photo': 'تصویر لیں',
+    'detection.choose_gallery': 'گیلری سے منتخب کریں',
+    'detection.analyzing': 'تجزیہ ہو رہا ہے...',
+    'detection.result': 'نتیجہ',
+    'detection.confidence': 'اعتماد',
+    'detection.recommendation': 'سفارش',
+    'detection.retake': 'دوبارہ لیں',
+    'detection.capture_crop': 'متاثرہ فصل کے پتے کی تصویر لیں',
+    'detection.capture_pest': 'کیڑے یا متاثرہ علاقے کی تصویر لیں',
+    'detection.disease_title': 'فصل کی بیماری کی شناخت',
+    'detection.pest_title': 'کیڑوں اور حشرات کی شناخت',
+
+    // Chat
+    'chat.title': 'کسان AI سے پوچھیں',
+    'chat.hint': 'فصلوں، موسم، بیماریوں کے بارے میں پوچھیں...',
+    'chat.send': 'بھیجیں',
+    'chat.welcome': 'السلام علیکم! میں آپ کا کسان AI ساتھی ہوں۔ کھیتی کے بارے میں کچھ بھی پوچھیں۔',
+
+    // History
+    'history.title': 'تاریخ',
+    'history.empty': 'ابھی تک کوئی تاریخ نہیں',
+    'history.empty_hint': 'آپ کے تجزیے کے نتائج یہاں ظاہر ہوں گے۔',
+
+    // Irrigation
+    'irrigation.title': 'آبپاشی رہنمائی',
+    'irrigation.schedule': 'شیڈول',
+    'irrigation.amount': 'پانی کی مقدار',
+    'irrigation.method': 'طریقہ',
+    'irrigation.tips': 'تجاویز',
+  };
+
+  static const Map<String, String> _pa = {
+    'app.name': 'کسان AI',
+    'welcome.get_started': 'شروع کرو',
+    'welcome.skip_demo': 'ڈیمو ویکھو',
+    'dashboard.greeting': 'السلام علیکم',
+    'dashboard.your_farm': 'اج تہاڈا کھیت',
+    'dashboard.quick_actions': 'فوری کم',
+    'settings.language': 'زبان',
+    'settings.title': 'سیٹنگاں',
+  };
+
+  static const Map<String, String> _sd = {
+    'app.name': 'ڪسان AI',
+    'welcome.get_started': 'شروع ڪريو',
+    'welcome.skip_demo': 'ڊيمو ڏسو',
+    'dashboard.greeting': 'السلام عليكم',
+    'dashboard.your_farm': 'اڄ توهان جو کيت',
+    'dashboard.quick_actions': 'فوري عمل',
+    'settings.language': 'ٻولي',
+    'settings.title': 'سيٽنگون',
+  };
+
+  static const Map<String, String> _ps = {
+    'app.name': 'کسان AI',
+    'welcome.get_started': 'شروع کړئ',
+    'welcome.skip_demo': 'ډیمو وګورئ',
+    'dashboard.greeting': 'السلام علیکم',
+    'dashboard.your_farm': 'نن ورځ ستاسو فارم',
+    'dashboard.quick_actions': 'چټک عمل',
+    'settings.language': 'ژبه',
+    'settings.title': 'تنظیمات',
+  };
+
+  static const Map<String, String> _bal = {
+    'app.name': 'کسان AI',
+    'welcome.get_started': 'شروع کن',
+    'welcome.skip_demo': 'ڈیمو بنگ',
+    'dashboard.greeting': 'السلام علیکم',
+    'dashboard.your_farm': 'امروچی توهان جو کیت',
+    'dashboard.quick_actions': 'تیز عمل',
+    'settings.language': 'زبان',
+    'settings.title': 'سیٹنگ',
+  };
+}
