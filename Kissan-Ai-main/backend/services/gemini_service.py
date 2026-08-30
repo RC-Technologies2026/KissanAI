@@ -46,7 +46,7 @@ You MUST respond with a valid JSON object matching this exact schema:
   ],
   "treatment": [
     "Direct organic/cultural treatment step in {lang}",
-    "Exact chemical name, dosage per acre/liter, and safety gear in {lang}"
+    "Brand Name + Product Name (e.g., Syngenta - Virtako or FFC - Sona Urea), exact dosage per acre/liter, application timing, and safety gear in {lang}"
   ]
 }}"""
 
@@ -71,7 +71,7 @@ You MUST respond with a valid JSON object matching this exact schema:
   ],
   "recommended_pesticide": [
     "Recommended organic/biological spray step in {lang}",
-    "Exact chemical pesticide name, dosage per acre/liter of water, and safety gear in {lang}"
+    "Brand Name + Product Name (e.g., FMC - Coragen), exact dosage per acre/liter of water, application timing, and safety gear in {lang}"
   ]
 }}"""
 
