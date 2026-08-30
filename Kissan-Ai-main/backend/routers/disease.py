@@ -1,5 +1,6 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
@@ -20,9 +21,14 @@ router = APIRouter(prefix="/api/disease", tags=["disease"])
 async def detect_disease(
     request: Request,
     file: UploadFile = File(...),
+    language: Optional[str] = Form("english"),
+    accept_language: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Determine requested language from Form or Header
+    selected_language = language or accept_language or "english"
+
     # --- 1. Read and validate file size ---
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
@@ -74,14 +80,15 @@ async def detect_disease(
     await db.commit()
     await db.refresh(image)
 
-    # --- 6. Structured Multi-Model Fallback Leaf Diagnosis ---
+    # --- 6. Structured Multi-Model Fallback Leaf Diagnosis in Requested Language ---
     parsed_data, formatted_markdown, model_used = await gemini_service.diagnose_leaf_image(
         image_bytes=contents,
         mime_type=content_type,
+        language=selected_language,
         timeout=15.0,
     )
 
-    # Dynamically extract disease_name and confidence_score
+    # Dynamically extract localized disease_name and confidence_score
     disease_name = parsed_data.get("disease_name") or "Plant Disease Diagnosis"
     confidence_val = parsed_data.get("confidence_score", 0.95)
     try:
@@ -101,7 +108,7 @@ async def detect_disease(
     await db.commit()
     await db.refresh(detection)
 
-    # --- 8. Return response containing full diagnosis & dynamic disease name ---
+    # --- 8. Return response containing localized diagnosis & dynamic disease name ---
     return DiseaseDetectionResponse(
         id=detection.id,
         image_id=image.id,

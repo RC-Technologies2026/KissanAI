@@ -25,20 +25,30 @@ models_to_try = [
     "gemini-pro-latest",
 ]
 
-DEFAULT_DIAGNOSIS_PROMPT = """Analyze this plant/leaf image and provide a concise, high-accuracy diagnosis (keep response under 150-200 words).
+
+def build_diagnosis_prompt(language: str = "english") -> str:
+    """Builds a localized prompt for disease diagnosis in the requested language."""
+    lang = (language or "english").strip().lower()
+    return f"""Analyze the crop leaf image. Detect the disease and return the entire response strictly in the requested language: {lang}.
+- If language is 'punjabi', write the disease name, symptoms, and treatment in clear Punjabi (Shahmukhi / Roman Punjabi).
+- If 'urdu', write in Urdu (or Roman Urdu as requested).
+- If 'english', write in English.
+- If any other language is requested, write strictly in that requested language.
+
+Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
 You MUST respond with a valid JSON object matching this exact schema:
-{
-  "disease_name": "Exact short disease name (e.g. Early Blight, Powdery Mildew, or Healthy Plant)",
+{{
+  "disease_name": "Exact short disease name in {lang}",
   "confidence_score": 0.95,
   "symptoms": [
-    "Short symptom bullet point 1",
-    "Short symptom bullet point 2"
+    "Short symptom bullet point 1 in {lang}",
+    "Short symptom bullet point 2 in {lang}"
   ],
   "treatment": [
-    "Direct organic/cultural treatment step",
-    "Exact chemical name, dosage per acre/liter, and safety gear"
+    "Direct organic/cultural treatment step in {lang}",
+    "Exact chemical name, dosage per acre/liter, and safety gear in {lang}"
   ]
-}"""
+}}"""
 
 
 class GeminiService:
@@ -121,16 +131,19 @@ class GeminiService:
         self,
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
+        language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
         timeout: float = 15.0,
     ) -> Tuple[Dict[str, Any], str, str]:
         """
-        Diagnoses a leaf image and returns (parsed_json_dict, formatted_markdown, model_used).
+        Diagnoses a leaf image in the requested language and returns (parsed_json_dict, formatted_markdown, model_used).
         """
+        active_prompt = prompt or build_diagnosis_prompt(language=language)
+
         contents = [
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            prompt or DEFAULT_DIAGNOSIS_PROMPT,
+            active_prompt,
         ]
 
         raw_response, model_used = await self.generate_content_with_fallback(
@@ -153,14 +166,14 @@ class GeminiService:
             logger.warning("Failed to parse direct JSON from Gemini: %s. Using text extraction.", json_err)
             # Fallback regex extraction for disease_name
             disease_match = re.search(r'"disease_name"\s*:\s*"([^"]+)"', raw_response) or re.search(
-                r"(?:Disease Name|Diagnosis)\s*:\s*([^\n\r]+)", raw_response, re.IGNORECASE
+                r"(?:Disease Name|Diagnosis|بیماری کا نام|ਬਿਮਾਰੀ ਦਾ ਨਾਂ)\s*:\s*([^\n\r]+)", raw_response, re.IGNORECASE
             )
             parsed_data["disease_name"] = disease_match.group(1).strip() if disease_match else "Plant Disease Diagnosis"
             parsed_data["confidence_score"] = 0.95
             parsed_data["symptoms"] = ["See detailed diagnosis below."]
             parsed_data["treatment"] = [raw_response]
 
-        # Construct readable markdown for UI display
+        # Construct readable localized markdown for UI display
         disease_name = parsed_data.get("disease_name", "Plant Disease Diagnosis")
         symptoms = parsed_data.get("symptoms", [])
         treatments = parsed_data.get("treatment", [])
@@ -170,8 +183,8 @@ class GeminiService:
 
         formatted_markdown = (
             f"### **Diagnosis**: {disease_name}\n\n"
-            f"#### **Observed Symptoms**:\n{symptoms_md}\n\n"
-            f"#### **Recommended Treatments & Action Steps**:\n{treatment_md}"
+            f"#### **Symptoms**:\n{symptoms_md}\n\n"
+            f"#### **Treatment & Management**:\n{treatment_md}"
         )
 
         return parsed_data, formatted_markdown, model_used
