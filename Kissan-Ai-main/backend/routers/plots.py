@@ -90,10 +90,17 @@ async def add_plot_crop(
 ):
     await _get_owned_plot(plot_id, db, current_user)
 
+    # DB column is TIMESTAMP WITHOUT TIME ZONE — strip tzinfo if the client
+    # sent a timezone-aware value (e.g. trailing "Z"), or asyncpg raises
+    # "can't subtract offset-naive and offset-aware datetimes".
+    sowing_date = body.sowing_date
+    if sowing_date is not None and sowing_date.tzinfo is not None:
+        sowing_date = sowing_date.replace(tzinfo=None)
+
     plot_crop = PlotCrop(
         plot_id=plot_id,
         crop_type=body.crop_type,
-        sowing_date=body.sowing_date,
+        sowing_date=sowing_date,
         growth_stage=body.growth_stage,
     )
     db.add(plot_crop)
