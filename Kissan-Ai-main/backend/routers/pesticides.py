@@ -31,7 +31,11 @@ async def recommend_pesticide(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     # --- 2. Get Rules Engine recommendation ---
-    rule = get_pesticide_recommendation(detection.disease_name)
+    # Prefer the fixed English category (set by Gemini alongside the
+    # localized disease_name) since disease_name may be translated/free-form
+    # and won't reliably match the rules engine's fixed keys. Fall back to
+    # disease_name for older rows saved before disease_category existed.
+    rule = get_pesticide_recommendation(detection.disease_category or detection.disease_name)
     if rule is None:
         rule = get_default_pesticide()
 

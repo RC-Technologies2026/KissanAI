@@ -12,6 +12,7 @@ class PestDetection(Base):
     image_id = Column(UUID(as_uuid=True), ForeignKey("images.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     pest_name = Column(String(255), nullable=False)
+    pest_category = Column(String(50), nullable=True)
     confidence_score = Column(Float, nullable=False)
     model_version = Column(String(50), nullable=True)
     detected_at = Column(DateTime, default=datetime.utcnow)

@@ -12,6 +12,7 @@ class DiseaseDetection(Base):
     image_id = Column(UUID(as_uuid=True), ForeignKey("images.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     disease_name = Column(String(255), nullable=False)
+    disease_category = Column(String(50), nullable=True)
     confidence_score = Column(Float, nullable=False)
     model_version = Column(String(50), nullable=True)
     detected_at = Column(DateTime, default=datetime.utcnow)

@@ -31,7 +31,7 @@ async def recommend_insecticide(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     # --- 2. Get Rules Engine recommendation ---
-    rule = get_insecticide_recommendation(detection.pest_name)
+    rule = get_insecticide_recommendation(detection.pest_category or detection.pest_name)
     if rule is None:
         rule = get_default_insecticide()
 

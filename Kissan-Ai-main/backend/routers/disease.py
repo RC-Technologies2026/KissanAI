@@ -90,6 +90,7 @@ async def detect_disease(
 
     # Dynamically extract localized disease_name and confidence_score
     disease_name = parsed_data.get("disease_name") or "Plant Disease Diagnosis"
+    disease_category = parsed_data.get("disease_category")
     confidence_val = parsed_data.get("confidence_score", 0.95)
     try:
         confidence_score = float(confidence_val)
@@ -101,6 +102,7 @@ async def detect_disease(
         image_id=image.id,
         user_id=current_user.id,
         disease_name=disease_name[:255],
+        disease_category=disease_category[:50] if disease_category else None,
         confidence_score=confidence_score,
         model_version=model_used,
     )
@@ -113,6 +115,7 @@ async def detect_disease(
         id=detection.id,
         image_id=image.id,
         disease_name=detection.disease_name,
+        disease_category=detection.disease_category,
         confidence_score=detection.confidence_score,
         model_version=detection.model_version,
         detected_at=detection.detected_at,

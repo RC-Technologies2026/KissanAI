@@ -91,6 +91,7 @@ async def detect_pest(
 
     # Dynamically extract pest_name and confidence_score from Gemini response
     pest_name = parsed_data.get("pest_name") or "Pest Identification"
+    pest_category = parsed_data.get("pest_category")
     confidence_val = parsed_data.get("confidence_score", 0.95)
     try:
         confidence_score = float(confidence_val)
@@ -102,6 +103,7 @@ async def detect_pest(
         image_id=image.id,
         user_id=current_user.id,
         pest_name=pest_name[:255],
+        pest_category=pest_category[:50] if pest_category else None,
         confidence_score=confidence_score,
         model_version=model_used,
     )
@@ -114,6 +116,7 @@ async def detect_pest(
         id=detection.id,
         image_id=image.id,
         pest_name=detection.pest_name,
+        pest_category=detection.pest_category,
         confidence_score=detection.confidence_score,
         model_version=detection.model_version,
         detected_at=detection.detected_at,

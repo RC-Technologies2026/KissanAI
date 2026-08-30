@@ -8,6 +8,7 @@ class PestDetectionResponse(BaseModel):
     id: Optional[UUID] = None
     image_id: UUID
     pest_name: str
+    pest_category: Optional[str] = None
     confidence_score: float
     model_version: str
     detected_at: datetime

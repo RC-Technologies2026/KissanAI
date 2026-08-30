@@ -8,6 +8,7 @@ class DiseaseDetectionResponse(BaseModel):
     id: Optional[UUID] = None
     image_id: UUID
     disease_name: str
+    disease_category: Optional[str] = None
     confidence_score: float
     model_version: str
     detected_at: datetime

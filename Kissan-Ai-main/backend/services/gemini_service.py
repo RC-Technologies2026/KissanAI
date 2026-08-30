@@ -7,8 +7,17 @@ from typing import Optional, List, Union, Tuple, Any, Dict
 from fastapi import HTTPException, status
 from google import genai
 from prompts import KISSAN_SYSTEM_PROMPT
+from rules_engine.pesticide_rules import PESTICIDE_RULES
+from rules_engine.insecticide_rules import INSECTICIDE_RULES
 
 logger = logging.getLogger(__name__)
+
+# Fixed English category keys the rules engine understands. Gemini is asked
+# to classify into exactly one of these (in addition to giving a localized
+# display name), so pesticide/insecticide lookups never depend on matching
+# free-form or translated text.
+DISEASE_CATEGORIES = list(PESTICIDE_RULES.keys()) + ["healthy"]
+PEST_CATEGORIES = list(INSECTICIDE_RULES.keys()) + ["none"]
 
 models_to_try = [
     "gemini-3.6-flash",
@@ -39,6 +48,7 @@ Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
 You MUST respond with a valid JSON object matching this exact schema:
 {{
   "disease_name": "Exact short disease name in {lang}",
+  "disease_category": "One exact value from this fixed list (always in English, regardless of {lang}): {DISEASE_CATEGORIES}. Pick the closest match. Use \\"healthy\\" if the plant shows no disease.",
   "confidence_score": 0.95,
   "symptoms": [
     "Short symptom bullet point 1 in {lang}",
@@ -64,6 +74,7 @@ Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
 You MUST respond with a valid JSON object matching this exact schema:
 {{
   "pest_name": "Exact short pest name in English and {lang} (e.g. Cotton Bug / کپاس کا کیڑا)",
+  "pest_category": "One exact value from this fixed list (always in English, regardless of {lang}): {PEST_CATEGORIES}. Pick the closest match. Use \\"none\\" if no pest is visible.",
   "confidence_score": 0.95,
   "damage_symptoms": [
     "Short damage symptom bullet point 1 in {lang}",
