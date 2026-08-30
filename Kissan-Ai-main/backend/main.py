@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+from routers.plots import router as plots_router
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +71,7 @@ app.include_router(insecticides_router)
 app.include_router(irrigation_router)
 app.include_router(history_router)
 app.include_router(chat_router)
+app.include_router(plots_router)
 
 @app.get("/health")
 def health_check():
