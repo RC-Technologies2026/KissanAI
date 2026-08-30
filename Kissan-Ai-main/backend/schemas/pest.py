@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 
 class PestDetectionResponse(BaseModel):
@@ -11,11 +11,4 @@ class PestDetectionResponse(BaseModel):
     confidence_score: float
     model_version: str
     detected_at: datetime
-
-
-class PestFallbackResponse(BaseModel):
-    message: str
-    top_candidates: List[str]
-    confidence_score: float
-    threshold: float
-    image_id: UUID
+    diagnosis: Optional[str] = None
