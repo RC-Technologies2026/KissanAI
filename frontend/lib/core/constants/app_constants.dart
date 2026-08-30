@@ -2,9 +2,8 @@
 class ApiConstants {
   ApiConstants._();
 
-  // Change to your backend host.
-  // On Android emulator use 10.0.2.2; on web/iOS/physical device use localhost.
-  static const String baseUrl = 'http://localhost:8000';
+  // Production backend URL
+  static const String baseUrl = 'https://kissanai-pkzn.onrender.com';
 
   // OpenWeatherMap API
   static const String openWeatherApiKey = '67ba3394df80888194a8f99ac8d56826';

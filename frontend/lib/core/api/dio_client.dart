@@ -10,8 +10,9 @@ Dio createDio() {
   final dio = Dio(
     BaseOptions(
       baseUrl: ApiConstants.baseUrl,
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 60),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -45,12 +46,11 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    // Silently swallow connection errors when no backend is running.
-    // The app works in demo/mock mode without a server.
+    // Handle connection errors gracefully
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.unknown) {
-      // Return a mock empty response so the app doesn't crash.
+      // Return a mock response indicating offline status
       handler.resolve(Response(
         requestOptions: err.requestOptions,
         data: {'error': 'offline'},

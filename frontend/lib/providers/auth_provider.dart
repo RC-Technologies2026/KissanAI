@@ -75,18 +75,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final data = res.data;
 
-      // Demo mode: backend returned offline mock — authenticate locally.
+      // Handle offline/mock response from backend
       if (data is Map && data['error'] == 'offline') {
-        final demoId = 'demo_${DateTime.now().millisecondsSinceEpoch}';
-        await saveToken('demo_token');
-        _storage.userId = demoId;
-        _storage.userName = name;
-        _storage.userEmail = email;
         state = state.copyWith(
-          status: AuthStatus.authenticated,
-          userId: demoId,
-          userName: name,
-          userEmail: email,
+          status: AuthStatus.unauthenticated,
+          error: 'Backend server is temporarily unavailable. Please try again later.',
         );
         return;
       }
@@ -108,7 +101,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: e.toString(),
+        error: 'Registration failed: ${e.toString()}',
       );
     }
   }
@@ -122,19 +115,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await _api.login(email: email, password: password);
       final data = res.data;
 
-      // Demo mode: backend returned offline mock — authenticate locally.
+      // Handle offline/mock response from backend
       if (data is Map && data['error'] == 'offline') {
-        final demoId = 'demo_${DateTime.now().millisecondsSinceEpoch}';
-        final name = email.split('@').first;
-        await saveToken('demo_token');
-        _storage.userId = demoId;
-        _storage.userName = name;
-        _storage.userEmail = email;
         state = state.copyWith(
-          status: AuthStatus.authenticated,
-          userId: demoId,
-          userName: name,
-          userEmail: email,
+          status: AuthStatus.unauthenticated,
+          error: 'Backend server is temporarily unavailable. Please try again later.',
         );
         return;
       }
@@ -157,7 +142,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: e.toString(),
+        error: 'Login failed: ${e.toString()}',
       );
     }
   }
