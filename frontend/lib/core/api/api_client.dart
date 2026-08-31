@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../constants/app_constants.dart';
 
 /// Dio singleton instance — lazily created.
 class ApiClient {
@@ -56,13 +57,57 @@ class ApiClient {
 
   // ─── Disease ─────────────────────────────────────────────
 
-  Future<Response> detectDisease(String imageId) =>
-      _dio.post('/api/disease/detect', data: {'image_id': imageId});
+  /// POST /api/disease/detect — multipart upload (file + language + crop_name).
+  /// Gemini diagnosis can take a while, so this request gets its own
+  /// longer receive timeout instead of the global 30s.
+  Future<Response> detectDisease({
+    required String filePath,
+    String language = 'english',
+    String? cropName,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: Uri.file(filePath).pathSegments.last,
+      ),
+      'language': language,
+      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
+    });
+    return _dio.post(
+      ApiConstants.diseaseDetect,
+      data: formData,
+      options: Options(
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 120),
+      ),
+    );
+  }
 
   // ─── Pests ───────────────────────────────────────────────
 
-  Future<Response> detectPest(String imageId) =>
-      _dio.post('/api/pests/detect', data: {'image_id': imageId});
+  /// POST /api/pests/detect — multipart upload (file + language + crop_name).
+  Future<Response> detectPest({
+    required String filePath,
+    String language = 'english',
+    String? cropName,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: Uri.file(filePath).pathSegments.last,
+      ),
+      'language': language,
+      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
+    });
+    return _dio.post(
+      ApiConstants.pestDetect,
+      data: formData,
+      options: Options(
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 120),
+      ),
+    );
+  }
 
   // ─── Recommendations ─────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/dio_client.dart';
 import '../core/storage/local_storage.dart';
@@ -101,7 +102,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'Registration failed: ${e.toString()}',
+        error: e is DioException
+            ? friendlyDioErrorMessage(e)
+            : 'Registration failed. Please try again.',
       );
     }
   }
@@ -142,7 +145,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'Login failed: ${e.toString()}',
+        error: e is DioException
+            ? friendlyDioErrorMessage(e)
+            : 'Login failed. Please try again.',
       );
     }
   }
