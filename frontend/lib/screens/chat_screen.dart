@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../providers/language_provider.dart';
 
 /// Chat message model.
 class _ChatMessage {
@@ -15,44 +18,89 @@ class _ChatMessage {
   final String time;
 }
 
-/// Screen 1 — Kisan AI Chat.
-class ChatScreen extends StatefulWidget {
+/// Chat screen — connected to backend /api/chat.
+class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-
-  // Mock messages — hardcoded example exchanges
-  final List<_ChatMessage> _messages = [
-    const _ChatMessage(
-      text: 'Assalam o Alaikum! Main Kisan AI hoon.\n'
-          'Apni fasal ke baare mein koi bhi sawaal poochh saktay hain. 🌾',
-      isUser: false,
-      time: '10:00 AM',
-    ),
-    const _ChatMessage(
-      text: 'Mere gehu ki pattiyan peeli ho rahi hain',
-      isUser: true,
-      time: '10:01 AM',
-    ),
-    const _ChatMessage(
-      text: 'Gehu ki pattiyan peeli hona nitrogen ki kami ya pani ki zyadti ki alamat ho sakti hai. Kya aap ne haal hi mein koi fertilizer lagaya hai?',
-      isUser: false,
-      time: '10:01 AM',
-    ),
-  ];
+  final List<_ChatMessage> _messages = [];
+  bool _isLoading = false;
 
   final List<String> _suggestions = [
-    'میری فصل پر بیماری ہے',
-    'موسم کیسا رہے گا؟',
-    'کون سی فصل لگاؤں؟',
-    'کھاد کب ڈالیں؟',
+    'What crop should I plant this season?',
+    'How to detect wheat rust?',
+    'Weather forecast for today?',
+    'Best pesticide for cotton?',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final lang = ref.read(languageProvider);
+    _messages.add(_ChatMessage(
+      text: lang.t('chat.welcome'),
+      isUser: false,
+      time: _now(),
+    ));
+    _loadHistory();
+  }
+
+  String _now() {
+    final t = DateTime.now();
+    final h = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
+    final am = t.hour >= 12 ? 'PM' : 'AM';
+    return '$h:${t.minute.toString().padLeft(2, '0')} $am';
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final res = await ApiClient.instance.getChatHistory(limit: 20);
+      final items = res.data as List;
+      if (items.isEmpty) return;
+
+      final history = <_ChatMessage>[];
+      for (final item in items.reversed) {
+        final msg = item as Map<String, dynamic>;
+        history.add(_ChatMessage(
+          text: msg['message'] as String,
+          isUser: true,
+          time: _formatTime(msg['created_at'] as String?),
+        ));
+        history.add(_ChatMessage(
+          text: msg['response'] as String,
+          isUser: false,
+          time: _formatTime(msg['created_at'] as String?),
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          _messages.addAll(history);
+          _scrollToBottom();
+        });
+      }
+    } catch (_) {
+      // History load failed silently — user can still chat
+    }
+  }
+
+  String _formatTime(String? iso) {
+    if (iso == null) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final am = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$h:${dt.minute.toString().padLeft(2, '0')} $am';
+    } catch (_) {
+      return '';
+    }
+  }
 
   @override
   void dispose() {
@@ -61,20 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
-    final text = _inputCtrl.text.trim();
-    if (text.isEmpty) return;
-
-    setState(() {
-      _messages.add(_ChatMessage(
-        text: text,
-        isUser: true,
-        time: 'Now',
-      ));
-      _inputCtrl.clear();
-    });
-
-    // Scroll to bottom
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
@@ -84,32 +119,50 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     });
+  }
 
-    // Mock AI reply after delay
-    Future.delayed(const Duration(seconds: 1), () {
+  void _sendMessage() async {
+    final text = _inputCtrl.text.trim();
+    if (text.isEmpty || _isLoading) return;
+
+    setState(() {
+      _messages.add(_ChatMessage(text: text, isUser: true, time: _now()));
+      _isLoading = true;
+      _inputCtrl.clear();
+    });
+    _scrollToBottom();
+
+    try {
+      final res = await ApiClient.instance.sendChatMessage(text);
+      final data = res.data as Map<String, dynamic>;
+      final reply = data['response'] as String? ?? 'Sorry, I could not process that.';
+
       if (mounted) {
         setState(() {
-          _messages.add(const _ChatMessage(
-            text: 'Yeh ek acha sawaal hai. Main is par kaam kar raha hoon...',
-            isUser: false,
-            time: 'Now',
-          ));
+          _messages.add(_ChatMessage(text: reply, isUser: false, time: _now()));
+          _isLoading = false;
         });
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (_scrollCtrl.hasClients) {
-            _scrollCtrl.animateTo(
-              _scrollCtrl.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+        _scrollToBottom();
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add(_ChatMessage(
+            text: 'Connection error. Please try again.',
+            isUser: false,
+            time: _now(),
+          ));
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final lang = ref.watch(languageProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -144,9 +197,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'اردو',
-                style: TextStyle(
+              child: Text(
+                lang.language,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -163,8 +216,26 @@ class _ChatScreenState extends State<ChatScreen> {
             child: ListView.builder(
               controller: _scrollCtrl,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (_, i) {
+                if (i >= _messages.length) {
+                  return const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 40),
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 final msg = _messages[i];
                 return _ChatBubble(message: msg);
               },
@@ -178,12 +249,14 @@ class _ChatScreenState extends State<ChatScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _suggestions.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, i) => GestureDetector(
-                onTap: () {
-                  _inputCtrl.text = _suggestions[i];
-                  _sendMessage();
-                },
+                onTap: _isLoading
+                    ? null
+                    : () {
+                        _inputCtrl.text = _suggestions[i];
+                        _sendMessage();
+                      },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 8),
@@ -226,7 +299,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: TextField(
                     controller: _inputCtrl,
                     decoration: const InputDecoration(
-                      hintText: 'Apna sawaal likhein...',
+                      hintText: 'Ask about crops, weather, diseases...',
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
@@ -234,30 +307,29 @@ class _ChatScreenState extends State<ChatScreen> {
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-                // Voice button (UI only)
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.mic,
-                      color: Colors.white, size: 20),
-                ),
                 const SizedBox(width: 8),
                 // Send button
                 GestureDetector(
-                  onTap: _sendMessage,
+                  onTap: _isLoading ? null : _sendMessage,
                   child: Container(
                     width: 36,
                     height: 36,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
+                    decoration: BoxDecoration(
+                      color: _isLoading
+                          ? AppColors.divider
+                          : AppColors.primary,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.send,
-                        color: Colors.white, size: 18),
+                    child: _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.send,
+                            color: Colors.white, size: 18),
                   ),
                 ),
               ],
@@ -293,7 +365,7 @@ class _ChatBubble extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: const Center(
-                child: Text('', style: TextStyle(fontSize: 16)),
+                child: Text('🌾', style: TextStyle(fontSize: 16)),
               ),
             ),
             const SizedBox(width: 8),

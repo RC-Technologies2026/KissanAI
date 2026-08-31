@@ -649,7 +649,7 @@ class _FeatureCard extends StatelessWidget {
               Image.asset(
                 imageAsset,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   color: AppColors.primary,
                 ),
               ),

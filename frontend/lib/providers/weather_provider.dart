@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/constants/app_constants.dart';
-import '../core/storage/local_storage.dart';
 import 'core_providers.dart';
+import '../core/storage/local_storage.dart';
 
 /// Daily forecast entry.
 class DailyForecast {
@@ -108,7 +105,6 @@ class WeatherState {
     IconData? conditionIcon,
     bool? loading,
     String? error,
-    bool clearError = false,
     List<HourlyForecast>? hourlyForecast,
     List<DailyForecast>? dailyForecast,
   }) =>
@@ -126,7 +122,7 @@ class WeatherState {
         condition: condition ?? this.condition,
         conditionIcon: conditionIcon ?? this.conditionIcon,
         loading: loading ?? this.loading,
-        error: clearError ? null : (error ?? this.error),
+        error: error ?? this.error,
         hourlyForecast: hourlyForecast ?? this.hourlyForecast,
         dailyForecast: dailyForecast ?? this.dailyForecast,
       );
@@ -138,266 +134,89 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     refresh();
   }
 
-  /// Shared Dio (auth interceptor attached in core_providers).
   final Dio _dio;
 
-  /// Backend `/api/weather/current` requires lat/lon; map the farmer's
-  /// stored city to coordinates (fallback: Faisalabad).
-  static const Map<String, List<double>> _cityCoords = {
-    'faisalabad': [31.4187, 73.0791],
-    'lahore': [31.5204, 74.3587],
-    'islamabad': [33.6844, 73.0479],
-    'rawalpindi': [33.5651, 73.0169],
-    'multan': [30.1575, 71.5246],
-    'gujranwala': [32.1570, 74.1867],
-    'sialkot': [32.5031, 74.5156],
-    'sargodha': [32.0836, 72.6711],
-    'sahiwal': [30.5706, 73.1050],
-    'bahawalpur': [29.3977, 71.6755],
-    'abbottabad': [34.1463, 73.2116],
-    'peshawar': [34.0151, 71.5249],
-    'mardan': [34.1979, 72.0496],
-    'quetta': [30.1798, 66.9750],
-    'karachi': [24.8607, 67.0011],
-    'hyderabad': [25.3960, 68.3578],
-    'sukkur': [27.7052, 68.8574],
-    'gilgit': [35.9201, 74.3078],
-    'muzaffarabad': [34.3700, 73.4720],
-  };
-
-  List<double> _coordsFor(String city) =>
-      _cityCoords[city.trim().toLowerCase()] ?? const [31.4187, 73.0791];
-
   Future<void> refresh() async {
-    state = state.copyWith(loading: true, clearError: true);
-
-    // Get location from storage or use default (Faisalabad)
-    final storage = LocalStorage.instance;
-    final city = storage.farmCity ?? 'Faisalabad';
-    final province = storage.farmProvince ?? 'Punjab';
-    final coords = _coordsFor(city);
+    state = state.copyWith(loading: true, error: null);
 
     try {
-      // Call backend weather endpoint with a 10 s budget so a dead
-      // connection surfaces quickly instead of hanging on Dio defaults.
+      // Get location from storage or use default (Faisalabad)
+      final storage = LocalStorage.instance;
+      final city = storage.farmCity ?? 'Faisalabad';
+      final province = storage.farmProvince ?? 'Punjab';
+
+      // Default coordinates for Faisalabad; backend requires lat/lon.
+      double lat = 31.4504;
+      double lon = 73.1350;
+
+      // Call backend weather endpoint with lat/lon
       final response = await _dio.get(
-        ApiConstants.weatherCurrent,
+        '/api/weather/current',
         queryParameters: {
-          'lat': coords[0],
-          'lon': coords[1],
+          'lat': lat,
+          'lon': lon,
         },
-        options: Options(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 10),
-        ),
       );
 
-      final data = response.data as Map<String, dynamic>;
+      final data = response.data;
 
-      // The auth interceptor resolves connection failures as a 200 with
-      // {'error': 'offline'} — surface that as a friendly message too.
-      if (data['error'] == 'offline') {
-        state = state.copyWith(
-          loading: false,
-          error: 'Internet connection error. Please check your network.',
-        );
-        return;
-      }
-
-      // Backend returns a flat WeatherResponse:
-      // {temperature, humidity, rain_probability, wind_speed (m/s), description}
-      final description = (data['description'] as String?) ?? 'clear';
+      // Backend returns flat WeatherResponse:
+      // {location, temperature, humidity, rain_probability, wind_speed, description, cached}
+      final temperature = (data['temperature'] as num?)?.round() ?? 32;
+      final humidity = (data['humidity'] as num?)?.round() ?? 65;
+      final rainProb = (data['rain_probability'] as num?)?.round() ?? 20;
+      final windSpeed = (data['wind_speed'] as num?)?.round() ?? 8;
+      final description = data['description'] as String? ?? 'Clear';
+      final location = data['location'] as String? ?? '$city, $province';
 
       state = WeatherState(
-        temperatureC: (data['temperature'] as num?)?.round() ?? state.temperatureC,
-        feelsLike: (data['feels_like'] as num?)?.round() ?? state.feelsLike,
-        rainProbability: (data['rain_probability'] as num?)?.round() ?? state.rainProbability,
-        windSpeedKmh: (((data['wind_speed'] as num?) ?? state.windSpeedKmh / 3.6) * 3.6).round(),
-        humidity: (data['humidity'] as num?)?.round() ?? state.humidity,
-        uvIndex: (data['uv_index'] as num?)?.round() ?? state.uvIndex,
-        visibility: ((data['visibility'] as num?) != null
-            ? (data['visibility'] as num) ~/ 1000
-            : state.visibility),
-        pressure: (data['pressure'] as num?)?.round() ?? state.pressure,
-        dewPoint: (data['dew_point'] as num?)?.round() ?? state.dewPoint,
-        location: '$city, $province',
-        condition: _capitalize(description),
-        conditionIcon: _iconFromDescription(description),
-        loading: false,
-        hourlyForecast: state.hourlyForecast,
-        dailyForecast: state.dailyForecast,
-      );
-    } on DioException catch (e, s) {
-      // Never surface raw Dio stack traces in the UI — log details, show
-      // a short farmer-friendly message.
-      debugPrint('Weather DioException (${e.type}): $s');
-      if (e.type == DioExceptionType.cancel) {
-        // Request intentionally aborted (e.g. screen disposed) — no error.
-        state = state.copyWith(loading: false);
-        return;
-      }
-      state = state.copyWith(
-        loading: false,
-        error: _friendlyErrorMessage(e),
-      );
-    } catch (e, s) {
-      debugPrint('Weather parse error: $s');
-      state = state.copyWith(
-        loading: false,
-        error: 'Unable to load weather right now. Pull down to retry.',
-      );
-    }
-  }
-
-  /// Maps a [DioException] (incl. raw `SocketException` DNS/connect
-  /// failures like "Failed host lookup") to a user-friendly message.
-  String _friendlyErrorMessage(DioException e) {
-    final isSocketError = e.error is SocketException;
-    switch (e.type) {
-      case DioExceptionType.connectionError:
-      case DioExceptionType.unknown:
-        if (isSocketError) {
-          return 'Internet connection error. Please check your network.';
-        }
-        return 'Unable to reach the weather service. Please try again.';
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'The weather service is taking too long to respond. Please try again.';
-      case DioExceptionType.badResponse:
-        final code = e.response?.statusCode ?? 0;
-        if (code == 401 || code == 403) {
-          return 'Session expired — please log in again to load weather.';
-        }
-        return 'Weather service error ($code). Please try again later.';
-      default:
-        return 'Unable to load weather right now. Pull down to retry.';
-    }
-  }
-
-  String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
-
-  IconData _iconFromDescription(String description) {
-    final d = description.toLowerCase();
-    if (d.contains('thunder') || d.contains('storm')) return Icons.flash_on;
-    if (d.contains('drizzle')) return Icons.grain;
-    if (d.contains('rain')) return Icons.water_drop;
-    if (d.contains('snow')) return Icons.ac_unit;
-    if (d.contains('fog') || d.contains('mist') || d.contains('haze')) {
-      return Icons.foggy;
-    }
-    if (d.contains('clear')) return Icons.wb_sunny;
-    if (d.contains('few clouds')) return Icons.cloud_queue;
-    return Icons.cloud;
-  }
-
-  List<HourlyForecast> _parseHourlyForecast(List forecastList) {
-    // Take next 8 entries (3-hour intervals = 24 hours)
-    final hours = <HourlyForecast>[];
-
-    for (var i = 0; i < forecastList.length && i < 8; i++) {
-      final item = forecastList[i] as Map<String, dynamic>;
-      final dt = DateTime.fromMillisecondsSinceEpoch(
-        (item['dt'] as int) * 1000,
-      );
-      final main = item['main'] as Map<String, dynamic>;
-      final weather = (item['weather'] as List).first as Map<String, dynamic>;
-      final pop = (item['pop'] as num? ?? 0).round(); // probability of precipitation
-
-      String hourLabel;
-      if (i == 0) {
-        hourLabel = 'Now';
-      } else {
-        final hour = dt.hour;
-        final suffix = hour >= 12 ? 'PM' : 'AM';
-        final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-        hourLabel = '$displayHour $suffix';
-      }
-
-      hours.add(HourlyForecast(
-        hour: hourLabel,
-        temp: (main['temp'] as num).round(),
-        conditionIcon: _getWeatherIcon(weather['id'] as int? ?? 800),
-        rainChance: (pop * 100).round(),
-      ));
-    }
-
-    return hours;
-  }
-
-  List<DailyForecast> _parseDailyForecast(List forecastList) {
-    // Group by day and get high/low for each day
-    final dailyMap = <String, List<Map<String, dynamic>>>{};
-
-    for (var i = 0; i < forecastList.length; i++) {
-      final item = forecastList[i] as Map<String, dynamic>;
-      final dt = DateTime.fromMillisecondsSinceEpoch(
-        (item['dt'] as int) * 1000,
-      );
-      final dayKey = '${dt.year}-${dt.month}-${dt.day}';
-
-      dailyMap.putIfAbsent(dayKey, () => []).add(item);
-    }
-
-    final days = <DailyForecast>[];
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final now = DateTime.now();
-    var dayIndex = 0;
-
-    dailyMap.forEach((dayKey, items) {
-      if (dayIndex >= 7) return;
-
-      final temps = items.map((e) => (e['main']['temp'] as num).toDouble()).toList();
-      final high = temps.reduce((a, b) => a > b ? a : b).round();
-      final low = temps.reduce((a, b) => a < b ? a : b).round();
-
-      // Use midday item for condition
-      final middayItem = items.first;
-      final weather = (middayItem['weather'] as List).first as Map<String, dynamic>;
-      final pop = (items.map((e) => (e['pop'] as num? ?? 0).toDouble()).reduce((a, b) => a > b ? a : b) * 100).round();
-      final humidity = (middayItem['main']['humidity'] as num).round();
-      final windSpeed = (((middayItem['wind']['speed'] as num) * 3.6).round());
-
-      final dt = DateTime.fromMillisecondsSinceEpoch(
-        (middayItem['dt'] as int) * 1000,
-      );
-
-      String dayLabel;
-      if (dayIndex == 0 && dt.day == now.day) {
-        dayLabel = 'Today';
-      } else {
-        dayLabel = dayNames[dt.weekday - 1];
-      }
-
-      days.add(DailyForecast(
-        day: dayLabel,
-        high: high,
-        low: low,
-        condition: weather['main'] as String? ?? 'Clear',
-        conditionIcon: _getWeatherIcon(weather['id'] as int? ?? 800),
-        rainChance: pop,
+        temperatureC: temperature,
+        feelsLike: temperature + 3,
+        rainProbability: rainProb,
+        windSpeedKmh: windSpeed,
         humidity: humidity,
-        windSpeed: windSpeed,
-      ));
-
-      dayIndex++;
-    });
-
-    return days;
+        uvIndex: 6,
+        visibility: 10,
+        pressure: 1013,
+        dewPoint: (temperature - 10).clamp(-10, 40),
+        location: location,
+        condition: _mapCondition(description),
+        conditionIcon: _conditionToIcon(description),
+        loading: false,
+        hourlyForecast: const <HourlyForecast>[],
+        dailyForecast: const <DailyForecast>[],
+      );
+    } catch (e) {
+      state = state.copyWith(
+        loading: false,
+        error: 'Failed to fetch weather: $e',
+      );
+    }
   }
 
-  IconData _getWeatherIcon(int weatherCode) {
-    // OpenWeatherMap weather condition codes
-    if (weatherCode >= 200 && weatherCode < 300) return Icons.flash_on; // Thunderstorm
-    if (weatherCode >= 300 && weatherCode < 400) return Icons.grain; // Drizzle
-    if (weatherCode >= 500 && weatherCode < 600) return Icons.water_drop; // Rain
-    if (weatherCode >= 600 && weatherCode < 700) return Icons.ac_unit; // Snow
-    if (weatherCode >= 700 && weatherCode < 800) return Icons.foggy; // Atmosphere
-    if (weatherCode == 800) return Icons.wb_sunny; // Clear
-    if (weatherCode == 801) return Icons.cloud_queue; // Few clouds
-    if (weatherCode == 802) return Icons.cloud; // Scattered clouds
-    if (weatherCode >= 803) return Icons.cloud; // Broken/overcast clouds
+  /// Map backend description string to a display-friendly condition label.
+  String _mapCondition(String description) {
+    final lower = description.toLowerCase();
+    if (lower.contains('clear')) return 'Clear';
+    if (lower.contains('partly')) return 'Partly Cloudy';
+    if (lower.contains('cloud')) return 'Cloudy';
+    if (lower.contains('rain')) return 'Rainy';
+    if (lower.contains('thunder')) return 'Thunderstorm';
+    if (lower.contains('drizzle')) return 'Drizzle';
+    if (lower.contains('snow')) return 'Snowy';
+    if (lower.contains('fog') || lower.contains('mist')) return 'Foggy';
+    return description;
+  }
+
+  /// Map backend description to a Material icon.
+  IconData _conditionToIcon(String description) {
+    final lower = description.toLowerCase();
+    if (lower.contains('clear') || lower.contains('sun')) return Icons.wb_sunny;
+    if (lower.contains('partly') || lower.contains('cloud')) return Icons.cloud;
+    if (lower.contains('rain') || lower.contains('drizzle')) return Icons.water_drop;
+    if (lower.contains('thunder')) return Icons.flash_on;
+    if (lower.contains('snow')) return Icons.ac_unit;
+    if (lower.contains('fog') || lower.contains('mist')) return Icons.foggy;
     return Icons.cloud;
   }
 
@@ -418,5 +237,8 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
 final weatherProvider =
     StateNotifierProvider<WeatherNotifier, WeatherState>(
-  (ref) => WeatherNotifier(ref.watch(dioProvider)),
+  (ref) {
+    final dio = ref.watch(dioProvider);
+    return WeatherNotifier(dio);
+  },
 );

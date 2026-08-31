@@ -19,6 +19,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  String? _lastError;
 
   @override
   void dispose() {
@@ -29,6 +30,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    // Clear previous error so the listener can fire again
+    _lastError = null;
     await ref.read(authProvider.notifier).login(
           email: _emailCtrl.text.trim(),
           password: _passCtrl.text,
@@ -41,10 +44,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     ref.listen<AuthState>(authProvider, (_, next) {
       if (next.status == AuthStatus.authenticated) {
-        context.go(Routes.dashboard);
-      } else if (next.error != null) {
+        // Use context.go() — GoRouter handles the auth state rebuild correctly
+        // because the redirect guard will protect authenticated routes.
+        if (context.mounted) {
+          context.go(Routes.dashboard);
+        }
+      } else if (next.status == AuthStatus.unauthenticated &&
+          next.error != null &&
+          next.error != _lastError) {
+        _lastError = next.error;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.error!)),
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     });

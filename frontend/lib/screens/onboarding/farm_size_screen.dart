@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../providers/onboarding_provider.dart';
-import '../../providers/core_providers.dart';
 import '../../router/app_router.dart';
 import '../../widgets/onboarding_scaffold.dart';
 import '../../core/storage/local_storage.dart';
@@ -32,11 +31,13 @@ class FarmSizeScreen extends ConsumerWidget {
         notifier.setSubmitting(true);
 
         try {
-          final api = ref.read(apiClientProvider);
-          await api.submitOnboarding(state.toPayload());
+          // Save farm size to local storage
+          final storage = LocalStorage.instance;
+          storage.farmSize = state.farmSize;
+          storage.farmSizeUnit = state.sizeUnit;
 
-          // Mark onboarding as complete
-          LocalStorage.instance.onboardingComplete = true;
+          // Mark onboarding as complete locally (no backend endpoint exists)
+          storage.onboardingComplete = true;
           notifier.setSubmitting(false);
 
           if (context.mounted) {
@@ -46,7 +47,7 @@ class FarmSizeScreen extends ConsumerWidget {
           notifier.setError(e.toString());
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Submission failed: $e')),
+              SnackBar(content: Text('Error: $e')),
             );
           }
         }

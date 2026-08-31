@@ -66,7 +66,7 @@ class AppTranslations {
     'auth.password_length': 'Password must be at least 8 characters',
 
     // Dashboard
-    'dashboard.greeting': 'Assalam-o-Alaikum',
+    'dashboard.greeting': 'Hello',
     'dashboard.your_farm': 'Your farm today',
     'dashboard.quick_actions': 'Quick Actions',
     'dashboard.disease_detection': 'Disease\nDetection',
@@ -166,7 +166,7 @@ class AppTranslations {
     'chat.title': 'Ask Kisan AI',
     'chat.hint': 'Ask about crops, weather, diseases...',
     'chat.send': 'Send',
-    'chat.welcome': 'Assalam-o-Alaikum! I\'m your Kisan AI assistant. Ask me anything about farming.',
+    'chat.welcome': 'Hello! I\'m your Kisan AI assistant. Ask me anything about crops, weather, or diseases.',
 
     // History
     'history.title': 'History',

@@ -41,20 +41,20 @@ class WelcomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // Skip and explore demo link
-              GestureDetector(
-                onTap: () => context.go(Routes.dashboard),
-                child: Text(
-                  lang.t('welcome.skip_demo'),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.bodyText,
-                    decoration: TextDecoration.underline,
-                    decorationColor: AppColors.bodyText,
+              // Already have an account? Log in
+              Center(
+                child: TextButton(
+                  onPressed: () => context.go(Routes.login),
+                  child: Text(
+                    lang.t('auth.have_account'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-
               const SizedBox(height: 32),
             ],
           ),

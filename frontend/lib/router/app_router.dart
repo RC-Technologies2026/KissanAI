@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
@@ -29,6 +30,13 @@ import '../screens/splash_screen.dart';
 /// Route path constants.
 class Routes {
   Routes._();
+
+  /// Global navigator key — lets screens navigate directly via the
+  /// Navigator even when GoRouter is being rebuilt (e.g. after auth change).
+  static final navigatorKey = GlobalKey<NavigatorState>();
+
+  /// Convenience accessor for the current NavigatorState.
+  static NavigatorState? get navigator => navigatorKey.currentState;
 
   static const String splash = '/splash';
   static const String welcome = '/';
@@ -71,13 +79,20 @@ class Routes {
   static const String settings = '/settings';
 }
 
-/// GoRouter instance provider — watches auth state for redirect logic.
+/// GoRouter instance provider.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  // Listen to auth state changes to trigger router redirects
+  final listenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
+  ref.listen<AuthState>(authProvider, (_, next) {
+    listenable.value = next.status;
+  });
 
   return GoRouter(
+    navigatorKey: Routes.navigatorKey,
     initialLocation: Routes.splash,
+    refreshListenable: listenable,
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isAuth = authState.status == AuthStatus.authenticated;
       final isSplashRoute = state.matchedLocation == Routes.splash;
       final isAuthRoute = state.matchedLocation == Routes.welcome ||
@@ -105,13 +120,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Splash ────────────────────────────────────────────
       GoRoute(
         path: Routes.splash,
-        builder: (_, __) => const SplashScreen(),
+        builder: (_, _) => const SplashScreen(),
       ),
       
       // ── Auth ────────────────────────────────────────────
       GoRoute(
         path: Routes.welcome,
-        builder: (_, __) => const WelcomeScreen(),
+        builder: (_, _) => const WelcomeScreen(),
       ),
       GoRoute(
         path: Routes.register,

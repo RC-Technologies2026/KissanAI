@@ -31,25 +31,23 @@ class ApiConstants {
   static const String pestDetect = '/api/pests/detect';
 
   // Pesticides / Insecticides
-  static String pesticidesForDetection(String id) =>
-      '/api/pesticides/$id';
-  static String insecticidesForDetection(String id) =>
-      '/api/insecticides/$id';
+  static const String pesticidesRecommend = '/api/pesticides/recommend';
+  static const String insecticidesRecommend = '/api/insecticides/recommend';
 
   // Weather
   static const String weatherCurrent = '/api/weather/current';
 
-  // Crop Recommendation
-  static const String cropRecommendation = '/api/crop-recommendation/get';
+  // Crop Recommendation (via irrigation module)
+  static const String cropRecommendation = '/api/irrigation/recommend';
 
   // Irrigation
-  static const String irrigation = '/api/irrigation/get';
+  static const String irrigation = '/api/irrigation/guide';
 
   // Chat
-  static const String chatMessage = '/api/chat/message';
+  static const String chatMessage = '/api/chat';
 
   // History
-  static const String historyList = '/api/history/list';
+  static const String historyList = '/api/history';
 }
 
 /// Hive box names.
@@ -100,6 +98,7 @@ class OnboardingData {
   ];
 
   static const List<String> languages = [
+    'English',
     'Urdu',
     'Punjabi',
     'Sindhi',

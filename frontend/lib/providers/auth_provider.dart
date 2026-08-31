@@ -76,22 +76,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final data = res.data;
 
-      // Handle offline/mock response from backend
-      if (data is Map && data['error'] == 'offline') {
+      // Backend returns UserOut (no token). Extract user id from response.
+      final userId = data['id'] as String? ?? '';
+
+      // Auto-login after registration to obtain the JWT token.
+      try {
+        final loginRes = await _api.login(email: email, password: password);
+        final loginData = loginRes.data;
+
+        final token = loginData['access_token'] as String;
+        await saveToken(token);
+      } catch (loginErr) {
+        // If auto-login fails after successful registration, still save user info
+        // so the user can manually log in.
         state = state.copyWith(
           status: AuthStatus.unauthenticated,
-          error: 'Backend server is temporarily unavailable. Please try again later.',
+          error: 'Registration successful! Please log in with your credentials.',
         );
         return;
       }
 
-      final token = data['token'] as String;
-      final userId = data['user_id'] as String;
-
-      await saveToken(token);
       _storage.userId = userId;
       _storage.userName = name;
       _storage.userEmail = email;
+      _storage.userPhone = phone;
 
       state = state.copyWith(
         status: AuthStatus.authenticated,
@@ -99,12 +107,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userName: name,
         userEmail: email,
       );
+    } on DioException catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        error: _networkMessage(e, fallback: 'Registration failed. Please try again.'),
+      );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: e is DioException
-            ? friendlyDioErrorMessage(e)
-            : 'Registration failed. Please try again.',
+        error: 'Registration failed. Please check your connection.',
       );
     }
   }
@@ -118,36 +129,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await _api.login(email: email, password: password);
       final data = res.data;
 
-      // Handle offline/mock response from backend
-      if (data is Map && data['error'] == 'offline') {
-        state = state.copyWith(
-          status: AuthStatus.unauthenticated,
-          error: 'Backend server is temporarily unavailable. Please try again later.',
-        );
-        return;
-      }
-
-      final token = data['token'] as String;
-      final userId = data['user_id'] as String;
-      final name = data['name'] as String? ?? '';
+      // Backend returns Token: {access_token, token_type}
+      final token = data['access_token'] as String;
 
       await saveToken(token);
-      _storage.userId = userId;
-      _storage.userName = name;
+
+      // Backend doesn't return user details in login response.
+      // Use email as the user identifier; preserve existing name if available.
+      _storage.userId = email;
       _storage.userEmail = email;
+      // Keep existing userName if already set (e.g. from registration)
+      if (_storage.userName == null || _storage.userName!.isEmpty) {
+        _storage.userName = email.split('@').first;
+      }
 
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        userId: userId,
-        userName: name,
+        userId: email,
+        userName: _storage.userName,
         userEmail: email,
+      );
+    } on DioException catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        error: _networkMessage(e, fallback: 'Login failed. Please try again.'),
       );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: e is DioException
-            ? friendlyDioErrorMessage(e)
-            : 'Login failed. Please try again.',
+        error: 'Login failed. Please check your connection.',
       );
     }
   }
@@ -164,6 +174,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.clearAuth();
     _storage.onboardingComplete = false;
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  /// Build a user-friendly error message from a [DioException].
+  String _networkMessage(DioException e, {String fallback = 'Something went wrong.'}) {
+    // Connection-level errors (no response from server)
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.unknown) {
+      return 'Server is taking too long to respond. It may be waking up from sleep — please try again in 30 seconds.';
+    }
+    // Server responded with an error
+    final statusCode = e.response?.statusCode;
+    final detail = e.response?.data is Map
+        ? e.response!.data['detail'] as String?
+        : null;
+    if (statusCode == 401) {
+      return detail ?? 'Invalid email or password.';
+    } else if (statusCode == 422) {
+      return detail ?? 'Please check the information you entered.';
+    } else if (statusCode != null && statusCode >= 500) {
+      return 'Server error ($statusCode). Please try again in a moment.';
+    }
+    return detail ?? fallback;
   }
 }
 

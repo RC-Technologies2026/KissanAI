@@ -89,7 +89,7 @@ class _IrrigationGuideScreenState extends State<IrrigationGuideScreen> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _crops.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (_, i) {
                   final crop = _crops[i];
                   final isSelected = _selectedCrop == crop;

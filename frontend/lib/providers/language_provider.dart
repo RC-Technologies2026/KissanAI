@@ -4,7 +4,7 @@ import '../core/storage/local_storage.dart';
 
 /// Language provider — manages current language and provides translation helper.
 class LanguageState {
-  const LanguageState({this.language = 'Urdu'});
+  const LanguageState({this.language = 'English'});
 
   final String language;
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
+import '../providers/language_provider.dart';
 import '../router/app_router.dart';
 
 /// Animated splash screen — logo reveal with smooth staggered animation.
@@ -32,7 +33,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 1200),
     );
 
     _iconOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -89,13 +90,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     );
 
     _controller.forward().then((_) {
-      Future.delayed(const Duration(milliseconds: 600), _navigate);
+      Future.delayed(const Duration(milliseconds: 200), _navigate);
     });
   }
 
   void _navigate() {
     if (!mounted) return;
     final authState = ref.read(authProvider);
+    // If still initializing, wait a bit longer and retry
+    if (authState.status == AuthStatus.initial) {
+      Future.delayed(const Duration(milliseconds: 300), _navigate);
+      return;
+    }
     if (authState.status == AuthStatus.authenticated) {
       context.go(Routes.dashboard);
     } else {
@@ -115,7 +121,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       backgroundColor: AppColors.background,
       body: AnimatedBuilder(
         animation: _controller,
-        builder: (_, __) {
+        builder: (_, _) {
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -230,14 +236,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
                     const SizedBox(height: 10),
 
-                    // Urdu tagline
+                    // Localized tagline
                     Opacity(
                       opacity: _taglineOpacity.value,
-                      child: const Text(
-                        'آپ کا زرعی ساتھی، ہر قدم ہمراہ',
+                      child: Text(
+                        ref.watch(languageProvider).t('app.tagline'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
+                        style: const TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.w500,
                           color: AppColors.bodyText,
                           height: 1.6,

@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import '../constants/app_constants.dart';
 
 /// Dio singleton instance — lazily created.
 class ApiClient {
@@ -23,7 +22,7 @@ class ApiClient {
     required String password,
   }) =>
       _dio.post('/api/auth/register', data: {
-        'name': name,
+        'full_name': name,
         'phone': phone,
         'email': email,
         'password': password,
@@ -47,105 +46,99 @@ class ApiClient {
 
   // ─── Images ──────────────────────────────────────────────
 
-  Future<Response> uploadImage(String filePath, String uploadType) async {
+  Future<Response> uploadImage(String filePath, String imageType) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
-      'upload_type': uploadType,
     });
-    return _dio.post('/api/images/upload', data: formData);
+    return _dio.post(
+      '/api/images/upload',
+      data: formData,
+      queryParameters: {'image_type': imageType},
+    );
   }
 
   // ─── Disease ─────────────────────────────────────────────
 
-  /// POST /api/disease/detect — multipart upload (file + language + crop_name).
-  /// Gemini diagnosis can take a while, so this request gets its own
-  /// longer receive timeout instead of the global 30s.
-  Future<Response> detectDisease({
-    required String filePath,
-    String language = 'english',
-    String? cropName,
-  }) async {
+  Future<Response> detectDisease(String filePath, {String language = 'english'}) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
-        filename: Uri.file(filePath).pathSegments.last,
-      ),
+      'file': await MultipartFile.fromFile(filePath),
       'language': language,
-      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
     });
-    return _dio.post(
-      ApiConstants.diseaseDetect,
-      data: formData,
-      options: Options(
-        sendTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 120),
-      ),
-    );
+    return _dio.post('/api/disease/detect', data: formData);
   }
 
   // ─── Pests ───────────────────────────────────────────────
 
-  /// POST /api/pests/detect — multipart upload (file + language + crop_name).
-  Future<Response> detectPest({
-    required String filePath,
-    String language = 'english',
-    String? cropName,
-  }) async {
+  Future<Response> detectPest(String filePath, {String language = 'english'}) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
-        filename: Uri.file(filePath).pathSegments.last,
-      ),
+      'file': await MultipartFile.fromFile(filePath),
       'language': language,
-      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
     });
-    return _dio.post(
-      ApiConstants.pestDetect,
-      data: formData,
-      options: Options(
-        sendTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 120),
-      ),
-    );
+    return _dio.post('/api/pests/detect', data: formData);
   }
 
   // ─── Recommendations ─────────────────────────────────────
 
-  Future<Response> getPesticides(String diseaseDetectionId) =>
-      _dio.get('/api/pesticides/$diseaseDetectionId');
+  Future<Response> getPesticides({
+    required String diseaseDetectionId,
+    double? lat,
+    double? lon,
+  }) =>
+      _dio.post('/api/pesticides/recommend', data: {
+        'disease_detection_id': diseaseDetectionId,
+        if (lat != null) 'lat': lat,
+        if (lon != null) 'lon': lon,
+      });
 
-  Future<Response> getInsecticides(String pestDetectionId) =>
-      _dio.get('/api/insecticides/$pestDetectionId');
+  Future<Response> getInsecticides({
+    required String pestDetectionId,
+    double? lat,
+    double? lon,
+  }) =>
+      _dio.post('/api/insecticides/recommend', data: {
+        'pest_detection_id': pestDetectionId,
+        if (lat != null) 'lat': lat,
+        if (lon != null) 'lon': lon,
+      });
 
   // ─── Weather ─────────────────────────────────────────────
 
-  Future<Response> getCurrentWeather() =>
-      _dio.get('/api/weather/current');
+  Future<Response> getCurrentWeather({
+    required double lat,
+    required double lon,
+  }) =>
+      _dio.get('/api/weather/current', queryParameters: {
+        'lat': lat,
+        'lon': lon,
+      });
 
   // ─── Crop Recommendation ─────────────────────────────────
 
   Future<Response> getCropRecommendation({
-    required String season,
-    required String soilType,
-    required String waterAvailability,
+    required String plotId,
   }) =>
-      _dio.post('/api/crop-recommendation/get', data: {
-        'season': season,
-        'soil_type': soilType,
-        'water_availability': waterAvailability,
+      _dio.post('/api/irrigation/recommend', data: {
+        'plot_id': plotId,
       });
 
   // ─── Irrigation ──────────────────────────────────────────
 
-  Future<Response> getIrrigationGuide() =>
-      _dio.post('/api/irrigation/get');
+  Future<Response> getIrrigationGuide(String cropRecommendationId) =>
+      _dio.get('/api/irrigation/guide/$cropRecommendationId');
 
   // ─── Chat ────────────────────────────────────────────────
 
   Future<Response> sendChatMessage(String message) =>
-      _dio.post('/api/chat/message', data: {'message': message});
+      _dio.post('/api/chat', data: {'message': message});
+
+  Future<Response> getChatHistory({int limit = 50}) =>
+      _dio.get('/api/chat', queryParameters: {'limit': limit});
 
   // ─── History ─────────────────────────────────────────────
 
-  Future<Response> getHistoryList() => _dio.get('/api/history/list');
+  Future<Response> getHistoryList({String? analysisType, int limit = 50}) =>
+      _dio.get('/api/history', queryParameters: {
+        if (analysisType != null) 'analysis_type': analysisType,
+        'limit': limit,
+      });
 }

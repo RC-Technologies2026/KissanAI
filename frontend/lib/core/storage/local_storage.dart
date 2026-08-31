@@ -63,7 +63,7 @@ class LocalStorage {
 
   // ─── Settings box ────────────────────────────────────────
 
-  String get language => _settingsBox.get(HiveKeys.language, defaultValue: 'Urdu') as String;
+  String get language => _settingsBox.get(HiveKeys.language, defaultValue: 'English') as String;
   set language(String v) => _settingsBox.put(HiveKeys.language, v);
 
   bool get notificationsEnabled =>

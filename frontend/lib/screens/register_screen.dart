@@ -27,6 +27,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  String? _lastError;
 
   // Farm details
   String _province = 'Punjab';
@@ -49,6 +50,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    // Clear previous error so the listener can fire again
+    _lastError = null;
 
     // Save farm details to onboarding provider
     final onboarding = ref.read(onboardingProvider.notifier);
@@ -87,10 +90,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (next.status == AuthStatus.authenticated) {
         // Mark onboarding as complete since farm details are captured here
         LocalStorage.instance.onboardingComplete = true;
-        context.go(Routes.dashboard);
-      } else if (next.error != null) {
+        // Use context.go() — GoRouter's redirect guard handles route protection.
+        if (context.mounted) {
+          context.go(Routes.dashboard);
+        }
+      } else if (next.status == AuthStatus.unauthenticated &&
+          next.error != null &&
+          next.error != _lastError) {
+        _lastError = next.error;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.error!)),
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor:
+                next.error!.contains('successful') ? Colors.green.shade700 : Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     });

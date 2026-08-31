@@ -17,8 +17,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late bool _notifications;
 
   final _languages = [
-    'Urdu',
     'English',
+    'Urdu',
     'Punjabi',
     'Sindhi',
     'Pashto',

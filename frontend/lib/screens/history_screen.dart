@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
 
 /// History item model.
@@ -30,62 +32,104 @@ const _filters = <String, HistoryType?>{
   'Irrigation': HistoryType.irrigation,
 };
 
-/// Screen 4 — Analysis History.
-class HistoryScreen extends StatefulWidget {
+/// History screen — connected to backend /api/history.
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   String _activeFilter = 'All';
+  List<_HistoryItem> _allItems = [];
+  bool _loading = true;
+  String? _error;
 
-  // Mock history data
-  final List<_HistoryItem> _allItems = [
-    const _HistoryItem(
-      type: HistoryType.disease,
-      title: 'Leaf Blight Detected',
-      crop: 'Wheat',
-      date: 'Aug 24, 2025',
-      status: 'Treated',
-    ),
-    const _HistoryItem(
-      type: HistoryType.pest,
-      title: 'Whitefly Infestation',
-      crop: 'Cotton',
-      date: 'Aug 20, 2025',
-      status: 'Treated',
-    ),
-    const _HistoryItem(
-      type: HistoryType.crop,
-      title: 'Crop Recommendation',
-      crop: 'Rice',
-      date: 'Aug 18, 2025',
-      status: 'Pending',
-    ),
-    const _HistoryItem(
-      type: HistoryType.disease,
-      title: 'Rust Detected',
-      crop: 'Wheat',
-      date: 'Aug 15, 2025',
-      status: 'Treated',
-    ),
-    const _HistoryItem(
-      type: HistoryType.irrigation,
-      title: 'Irrigation Schedule',
-      crop: 'Maize',
-      date: 'Aug 12, 2025',
-      status: 'Pending',
-    ),
-    const _HistoryItem(
-      type: HistoryType.pest,
-      title: 'Armyworm Detected',
-      crop: 'Maize',
-      date: 'Aug 10, 2025',
-      status: 'Treated',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistory();
+  }
+
+  Future<void> _fetchHistory() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final res = await ApiClient.instance.getHistoryList(limit: 100);
+      final items = res.data as List;
+
+      final parsed = items.map<_HistoryItem>((item) {
+        final map = item as Map<String, dynamic>;
+        final analysisType = (map['analysis_type'] as String? ?? '').toLowerCase();
+        final snapshot = map['result_snapshot'] as Map<String, dynamic>? ?? {};
+        final createdAt = map['created_at'] as String? ?? '';
+
+        HistoryType type;
+        String title;
+        String crop;
+
+        if (analysisType.contains('disease')) {
+          type = HistoryType.disease;
+          title = snapshot['disease_name'] as String? ?? 'Disease Detection';
+          crop = snapshot['crop'] as String? ?? 'Crop';
+        } else if (analysisType.contains('pest')) {
+          type = HistoryType.pest;
+          title = snapshot['pest_name'] as String? ?? 'Pest Detection';
+          crop = snapshot['crop'] as String? ?? 'Crop';
+        } else if (analysisType.contains('crop') || analysisType.contains('irrigation')) {
+          type = analysisType.contains('irrigation')
+              ? HistoryType.irrigation
+              : HistoryType.crop;
+          title = snapshot['title'] as String? ?? 'Recommendation';
+          crop = snapshot['crop'] as String? ?? '';
+        } else {
+          type = HistoryType.crop;
+          title = snapshot['title'] as String? ?? 'Analysis';
+          crop = '';
+        }
+
+        return _HistoryItem(
+          type: type,
+          title: title,
+          crop: crop,
+          date: _formatDate(createdAt),
+          status: snapshot['status'] as String? ?? 'Completed',
+        );
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _allItems = parsed;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Failed to load history. Pull to refresh.';
+        });
+      }
+    }
+  }
+
+  String _formatDate(String iso) {
+    if (iso.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return '';
+    }
+  }
 
   List<_HistoryItem> get _filteredItems {
     if (_activeFilter == 'All') return _allItems;
@@ -145,6 +189,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
             color: AppColors.headingText,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: _loading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  )
+                : const Icon(Icons.refresh, color: AppColors.primary),
+            onPressed: _loading ? null : _fetchHistory,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -155,7 +212,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _filters.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final label = _filters.keys.elementAt(i);
                 final isActive = _activeFilter == label;
@@ -189,17 +246,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           const SizedBox(height: 16),
 
-          // History list or empty state
+          // Content
           Expanded(
-            child: items.isEmpty
-                ? _buildEmptyState()
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (_, i) =>
-                        _buildHistoryCard(items[i]),
-                  ),
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.cloud_off,
+                                size: 48, color: AppColors.bodyText),
+                            const SizedBox(height: 12),
+                            Text(
+                              _error!,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: AppColors.bodyText,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _fetchHistory,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : items.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 12),
+                            itemBuilder: (_, i) =>
+                                _buildHistoryCard(items[i]),
+                          ),
           ),
         ],
       ),
@@ -208,7 +293,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildHistoryCard(_HistoryItem item) {
     final style = _styleFor(item.type);
-    final isTreated = item.status == 'Treated';
 
     return GestureDetector(
       onTap: () {
@@ -255,13 +339,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${item.crop} \u00B7 ${item.date}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.bodyText,
+                  if (item.crop.isNotEmpty)
+                    Text(
+                      '${item.crop} \u00B7 ${item.date}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.bodyText,
+                      ),
+                    )
+                  else
+                    Text(
+                      item.date,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.bodyText,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -270,19 +363,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: isTreated
-                    ? const Color(0xFFE8F5E9)
-                    : const Color(0xFFFFF8E1),
+                color: const Color(0xFFE8F5E9),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 item.status,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isTreated
-                      ? const Color(0xFF2E7D32)
-                      : const Color(0xFFF9A825),
+                  color: Color(0xFF2E7D32),
                 ),
               ),
             ),

@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Required for all network calls (Dio/HTTP). Without this, release builds
-         fail with SocketException: Failed host lookup even on wifi. -->
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="Kisan AI"
         android:name="${applicationName}"
