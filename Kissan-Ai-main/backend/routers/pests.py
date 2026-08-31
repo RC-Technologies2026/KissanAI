@@ -22,6 +22,7 @@ async def detect_pest(
     request: Request,
     file: UploadFile = File(...),
     language: Optional[str] = Form("english"),
+    crop_name: Optional[str] = Form(None, description="Known crop type (e.g. Pomegranate) — prioritized over visual identification"),
     accept_language: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -87,6 +88,7 @@ async def detect_pest(
         mime_type=content_type,
         language=selected_language,
         timeout=15.0,
+        crop_name=crop_name,
     )
 
     # Dynamically extract pest_name and confidence_score from Gemini response
@@ -113,6 +115,7 @@ async def detect_pest(
     return PestDetectionResponse(
         id=detection.id,
         image_id=image.id,
+        crop_name=parsed_data.get("crop_name"),
         pest_name=detection.pest_name,
         confidence_score=detection.confidence_score,
         model_version=detection.model_version,

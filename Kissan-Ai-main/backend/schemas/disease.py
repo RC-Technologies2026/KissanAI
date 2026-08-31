@@ -7,6 +7,7 @@ from typing import Optional, List
 class DiseaseDetectionResponse(BaseModel):
     id: Optional[UUID] = None
     image_id: UUID
+    crop_name: Optional[str] = None
     disease_name: str
     confidence_score: float
     model_version: str
