@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
 from models.pest_detection import PestDetection
+from models.analysis_history import AnalysisHistory
 from models.user import User
 from schemas.pest import PestDetectionResponse
 from auth.utils import get_current_user
@@ -110,6 +111,23 @@ async def detect_pest(
         model_version=model_used,
     )
     db.add(detection)
+    await db.flush()  # get detection.id before creating history
+
+    # --- 8b. Log to analysis history ---
+    history_entry = AnalysisHistory(
+        user_id=current_user.id,
+        analysis_type="pest",
+        reference_id=detection.id,
+        result_snapshot={
+            "pest_name": detection.pest_name,
+            "pest_category": detection.pest_category,
+            "confidence_score": detection.confidence_score,
+            "crop_name": parsed_data.get("crop_name"),
+            "diagnosis_summary": formatted_markdown[:500],
+        },
+    )
+    db.add(history_entry)
+
     await db.commit()
     await db.refresh(detection)
 

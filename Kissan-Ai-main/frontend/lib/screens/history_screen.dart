@@ -75,20 +75,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         if (analysisType.contains('disease')) {
           type = HistoryType.disease;
           title = snapshot['disease_name'] as String? ?? 'Disease Detection';
-          crop = snapshot['crop'] as String? ?? 'Crop';
+          crop = snapshot['crop_name'] as String? ?? '';
         } else if (analysisType.contains('pest')) {
           type = HistoryType.pest;
           title = snapshot['pest_name'] as String? ?? 'Pest Detection';
-          crop = snapshot['crop'] as String? ?? 'Crop';
+          crop = snapshot['crop_name'] as String? ?? '';
         } else if (analysisType.contains('crop') || analysisType.contains('irrigation')) {
           type = analysisType.contains('irrigation')
               ? HistoryType.irrigation
               : HistoryType.crop;
-          title = snapshot['title'] as String? ?? 'Recommendation';
-          crop = snapshot['crop'] as String? ?? '';
+          final recommendedCrops = snapshot['recommended_crops'] as String? ?? '';
+          title = recommendedCrops.isNotEmpty ? recommendedCrops : 'Crop Recommendation';
+          crop = snapshot['soil_type'] as String? ?? '';
         } else {
           type = HistoryType.crop;
-          title = snapshot['title'] as String? ?? 'Analysis';
+          title = 'Analysis';
           crop = '';
         }
 
@@ -97,7 +98,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           title: title,
           crop: crop,
           date: _formatDate(createdAt),
-          status: snapshot['status'] as String? ?? 'Completed',
+          status: 'Completed',
         );
       }).toList();
 

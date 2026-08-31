@@ -121,6 +121,27 @@ class ApiClient {
         'plot_id': plotId,
       });
 
+  // ─── Plots ───────────────────────────────────────────────
+
+  Future<Response> getPlots() => _dio.get('/api/plots');
+
+  Future<Response> createPlot({
+    required String name,
+    String? location,
+    double? areaHectares,
+    String? soilType,
+    double? latitude,
+    double? longitude,
+  }) =>
+      _dio.post('/api/plots', data: {
+        'name': name,
+        if (location != null) 'location': location,
+        if (areaHectares != null) 'area_hectares': areaHectares,
+        if (soilType != null) 'soil_type': soilType,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+      });
+
   // ─── Irrigation ──────────────────────────────────────────
 
   Future<Response> getIrrigationGuide(String cropRecommendationId) =>

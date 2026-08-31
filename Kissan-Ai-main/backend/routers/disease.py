@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.image import Image
 from models.disease_detection import DiseaseDetection
+from models.analysis_history import AnalysisHistory
 from models.user import User
 from schemas.disease import DiseaseDetectionResponse
 from auth.utils import get_current_user
@@ -109,6 +110,23 @@ async def detect_disease(
         model_version=model_used,
     )
     db.add(detection)
+    await db.flush()  # get detection.id before creating history
+
+    # --- 7b. Log to analysis history ---
+    history_entry = AnalysisHistory(
+        user_id=current_user.id,
+        analysis_type="disease",
+        reference_id=detection.id,
+        result_snapshot={
+            "disease_name": detection.disease_name,
+            "disease_category": detection.disease_category,
+            "confidence_score": detection.confidence_score,
+            "crop_name": parsed_data.get("crop_name"),
+            "diagnosis_summary": formatted_markdown[:500],
+        },
+    )
+    db.add(history_entry)
+
     await db.commit()
     await db.refresh(detection)
 

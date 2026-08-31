@@ -214,7 +214,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final type =
               extra?['detectionType'] as DetectionType? ?? DetectionType.disease;
-          return RecommendationScreen(detectionType: type);
+          final detectionId = extra?['detectionId'] as String?;
+          return RecommendationScreen(detectionType: type, detectionId: detectionId);
         },
       ),
 
