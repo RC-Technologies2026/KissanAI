@@ -35,7 +35,26 @@ models_to_try = [
 ]
 
 
-def build_diagnosis_prompt(language: str = "english") -> str:
+def _crop_identification_step(crop_name: Optional[str]) -> str:
+    """Mandatory Step-1 crop instruction, adapted to whether the caller
+    already told us the crop or Gemini must identify it from the image."""
+    if crop_name:
+        return (
+            f"CROP CONTEXT (authoritative): the farmer states this plant is \"{crop_name}\". "
+            f"TRUST this crop over your own visual guess — do NOT re-identify it and do NOT "
+            f"diagnose diseases/pests of any other crop. Return \"crop_name\" exactly as \"{crop_name}\"."
+        )
+    return (
+        "CROP IDENTIFICATION FIRST: carefully identify the CROP TYPE (e.g., Pomegranate/Anar, "
+        "Cotton, Wheat, Rice, Citrus, Maize, Sugarcane, Tomato, Onion, Canola) from the image based "
+        "on leaf shape, venation, color, and stem structure. Diagnose the disease/pest for THAT "
+        "identified crop only — never mix in another crop's diseases (e.g., do not report wheat "
+        "rust on a pomegranate leaf). Write \"crop_name\" in English plus local names in brackets, "
+        "e.g. \"Pomegranate (انار / ਅਨਾਰ)\"."
+    )
+
+
+def build_diagnosis_prompt(language: str = "english", crop_name: Optional[str] = None) -> str:
     """Builds a localized prompt for disease diagnosis in the requested language."""
     lang = (language or "english").strip().lower()
     return f"""Analyze the crop leaf image. Detect the disease and return the entire response strictly in the requested language: {lang}.
@@ -44,9 +63,14 @@ def build_diagnosis_prompt(language: str = "english") -> str:
 - If 'english', write in English.
 - If any other language is requested, write strictly in that requested language.
 
+STEP ORDER (mandatory):
+1. {_crop_identification_step(crop_name)}
+2. Then diagnose the specific disease for that crop only.
+
 Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
 You MUST respond with a valid JSON object matching this exact schema:
 {{
+  "crop_name": "Identified crop in English + local names, e.g. Pomegranate (انار / ਅਨਾਰ)",
   "disease_name": "Exact short disease name in {lang}",
   "disease_category": "One exact value from this fixed list (always in English, regardless of {lang}): {DISEASE_CATEGORIES}. Pick the closest match. Use \\"healthy\\" if the plant shows no disease.",
   "confidence_score": 0.95,
@@ -61,7 +85,7 @@ You MUST respond with a valid JSON object matching this exact schema:
 }}"""
 
 
-def build_pest_prompt(language: str = "english") -> str:
+def build_pest_prompt(language: str = "english", crop_name: Optional[str] = None) -> str:
     """Builds a localized prompt for pest identification in the requested language."""
     lang = (language or "english").strip().lower()
     return f"""Analyze this crop image for pest identification. Return the entire response strictly in the requested language: {lang}.
@@ -70,9 +94,14 @@ def build_pest_prompt(language: str = "english") -> str:
 - If 'english', write in English.
 - If any other language is requested, write strictly in that requested language.
 
+STEP ORDER (mandatory):
+1. {_crop_identification_step(crop_name)}
+2. Then identify the pest damaging that crop only.
+
 Keep the explanations short, direct, and farmer-friendly (under 150-200 words).
 You MUST respond with a valid JSON object matching this exact schema:
 {{
+  "crop_name": "Identified crop in English + local names, e.g. Pomegranate (انار / ਅਨਾਰ)",
   "pest_name": "Exact short pest name in English and {lang} (e.g. Cotton Bug / کپاس کا کیڑا)",
   "pest_category": "One exact value from this fixed list (always in English, regardless of {lang}): {PEST_CATEGORIES}. Pick the closest match. Use \\"none\\" if no pest is visible.",
   "confidence_score": 0.95,
@@ -171,11 +200,12 @@ class GeminiService:
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
         timeout: float = 15.0,
+        crop_name: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str, str]:
         """
         Diagnoses a leaf image in the requested language and returns (parsed_json_dict, formatted_markdown, model_used).
         """
-        active_prompt = prompt or build_diagnosis_prompt(language=language)
+        active_prompt = prompt or build_diagnosis_prompt(language=language, crop_name=crop_name)
 
         contents = [
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
@@ -209,7 +239,15 @@ class GeminiService:
             parsed_data["symptoms"] = ["See detailed diagnosis below."]
             parsed_data["treatment"] = [raw_response]
 
+        # Guarantee crop_name is present even if Gemini omitted it
+        if not parsed_data.get("crop_name"):
+            crop_fallback = re.search(r'"crop_name"\s*:\s*"([^"]+)"', raw_response)
+            parsed_data["crop_name"] = (
+                crop_fallback.group(1).strip() if crop_fallback else (crop_name or "Unknown crop")
+            )
+
         # Construct readable localized markdown for UI display
+        identified_crop = parsed_data.get("crop_name")
         disease_name = parsed_data.get("disease_name", "Plant Disease Diagnosis")
         symptoms = parsed_data.get("symptoms", [])
         treatments = parsed_data.get("treatment", [])
@@ -218,6 +256,7 @@ class GeminiService:
         treatment_md = "\n".join(f"- {t}" for t in treatments) if isinstance(treatments, list) else str(treatments)
 
         formatted_markdown = (
+            f"### **Crop**: {identified_crop}\n\n"
             f"### **Diagnosis**: {disease_name}\n\n"
             f"#### **Symptoms**:\n{symptoms_md}\n\n"
             f"#### **Treatment & Management**:\n{treatment_md}"
@@ -233,12 +272,13 @@ class GeminiService:
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
         timeout: float = 15.0,
+        crop_name: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str, str]:
         """
         Identifies a pest in a crop image in the requested language.
         Returns (parsed_json_dict, formatted_markdown, model_used).
         """
-        active_prompt = prompt or build_pest_prompt(language=language)
+        active_prompt = prompt or build_pest_prompt(language=language, crop_name=crop_name)
 
         contents = [
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
@@ -270,7 +310,15 @@ class GeminiService:
             parsed_data["damage_symptoms"] = ["See detailed report below."]
             parsed_data["recommended_pesticide"] = [raw_response]
 
+        # Guarantee crop_name is present even if Gemini omitted it
+        if not parsed_data.get("crop_name"):
+            crop_fallback = re.search(r'"crop_name"\s*:\s*"([^"]+)"', raw_response)
+            parsed_data["crop_name"] = (
+                crop_fallback.group(1).strip() if crop_fallback else (crop_name or "Unknown crop")
+            )
+
         # Construct readable localized markdown for UI display
+        identified_crop = parsed_data.get("crop_name")
         pest_name = parsed_data.get("pest_name", "Pest Identification")
         damage_symptoms = parsed_data.get("damage_symptoms", [])
         pesticides = parsed_data.get("recommended_pesticide", [])
@@ -279,6 +327,7 @@ class GeminiService:
         pesticide_md = "\n".join(f"- {p}" for p in pesticides) if isinstance(pesticides, list) else str(pesticides)
 
         formatted_markdown = (
+            f"### **Crop**: {identified_crop}\n\n"
             f"### **Identified Pest**: {pest_name}\n\n"
             f"#### **Damage Symptoms**:\n{symptoms_md}\n\n"
             f"#### **Recommended Pesticide & Treatment**:\n{pesticide_md}"

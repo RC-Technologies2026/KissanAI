@@ -7,6 +7,7 @@ from typing import Optional
 class PestDetectionResponse(BaseModel):
     id: Optional[UUID] = None
     image_id: UUID
+    crop_name: Optional[str] = None
     pest_name: str
     pest_category: Optional[str] = None
     confidence_score: float
