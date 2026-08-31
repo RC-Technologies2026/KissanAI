@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
-import '../core/api/dio_client.dart';
+import '../providers/core_providers.dart';
 import '../screens/detection/camera_picker_screen.dart';
 
 /// One titled block parsed out of the backend's `diagnosis` markdown,
@@ -85,10 +85,8 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
     state = const DetectionState(status: DetectionStatus.loading);
     try {
       final res = type == DetectionType.disease
-          ? await _api.detectDisease(
-              filePath: filePath, language: language, cropName: cropName)
-          : await _api.detectPest(
-              filePath: filePath, language: language, cropName: cropName);
+          ? await _api.detectDisease(filePath, language: language)
+          : await _api.detectPest(filePath, language: language);
 
       final data = res.data;
 
@@ -116,7 +114,7 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
     } on DioException catch (e) {
       state = DetectionState(
         status: DetectionStatus.failure,
-        errorMessage: friendlyDioErrorMessage(e),
+        errorMessage: _friendlyError(e),
       );
     } catch (_) {
       state = const DetectionState(
@@ -124,6 +122,23 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
         errorMessage: 'Could not analyze the photo. Please try again.',
       );
     }
+  }
+
+  String _friendlyError(DioException e) {
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      return 'Server is taking too long. Please try again.';
+    }
+    if (e.type == DioExceptionType.connectionError) {
+      return 'Cannot reach server. Please check your internet connection.';
+    }
+    if (e.response?.statusCode == 401) {
+      return 'Session expired. Please login again.';
+    }
+    if (e.response?.statusCode != null && e.response!.statusCode! >= 500) {
+      return 'Server error. Please try again later.';
+    }
+    return e.message ?? 'An unexpected error occurred.';
   }
 
   void reset() => state = const DetectionState();
@@ -182,7 +197,7 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
       if (title != null) {
         final body = buffer.toString().trim();
         if (body.isNotEmpty) {
-          sections.add(DetectionSection(title: title!, body: body));
+          sections.add(DetectionSection(title: title, body: body));
         }
         buffer.clear();
       }

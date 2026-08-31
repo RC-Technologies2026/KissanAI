@@ -196,8 +196,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final type =
               extra?['detectionType'] as DetectionType? ?? DetectionType.disease;
-          final imagePath = extra?['imagePath'] as String?;
-          return AnalyzingScreen(detectionType: type, imagePath: imagePath);
+          return AnalyzingScreen(detectionType: type);
         },
       ),
       GoRoute(
