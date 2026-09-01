@@ -60,7 +60,7 @@ class _CropRecommendationScreenState
       }
 
       // 4. Get crop recommendation
-      final recRes = await api.getCropRecommendation(plotId: plotId!);
+      final recRes = await api.getCropRecommendation(plotId: plotId);
       final recData = recRes.data as Map<String, dynamic>;
 
       final recommendedCrops =
