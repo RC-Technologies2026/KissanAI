@@ -27,5 +27,6 @@ COPY . .
 # Expose port (Render/Railway set PORT env var at runtime)
 EXPOSE 8000
 
-# Production: Uvicorn binds to 0.0.0.0, uses PORT env var (default 8000)
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run DB migrations before starting the app, then launch Uvicorn.
+# Render sets PORT env var at runtime; default to 8000 locally.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
