@@ -178,6 +178,7 @@ NOTE on image_quality: Set "usable" to false ONLY when the image is genuinely im
 
 class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
+        # Priority: explicit param > env var
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
         self.default_models = models_to_try
@@ -214,7 +215,7 @@ class GeminiService:
         contents: Union[str, List[Any]],
         config: Optional[Any] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 12.0,
+        timeout: float = 30.0,
         validate_json: bool = False,
     ) -> Tuple[str, str]:
         """
@@ -284,7 +285,7 @@ class GeminiService:
         self,
         message: str,
         models_list: Optional[List[str]] = None,
-        timeout: float = 12.0,
+        timeout: float = 30.0,
     ) -> str:
         """Asynchronously generates a text response with fallback support."""
         text, _ = await self.generate_content_with_fallback(
@@ -301,7 +302,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 12.0,
+        timeout: float = 30.0,
         crop_name: Optional[str] = None,
     ) -> Union[Tuple[Dict[str, Any], str, str], DiseaseFallbackResponse]:
         """
@@ -412,7 +413,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 12.0,
+        timeout: float = 30.0,
         crop_name: Optional[str] = None,
     ) -> Union[Tuple[Dict[str, Any], str, str], PestFallbackResponse]:
         """
@@ -522,7 +523,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 12.0,
+        timeout: float = 30.0,
     ) -> Union[Tuple[Dict[str, Any], str, str], PlantDiagnosisFallbackResponse]:
         """
         Diagnoses a houseplant / ornamental plant image in the requested language.
