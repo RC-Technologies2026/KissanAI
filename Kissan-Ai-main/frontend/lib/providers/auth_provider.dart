@@ -17,6 +17,14 @@ class AuthState {
     this.userEmail,
     this.userPhone,
     this.profileImageUrl,
+    this.farmName,
+    this.farmLocation,
+    this.province,
+    this.district,
+    this.city,
+    this.farmSize,
+    this.farmSizeUnit,
+    this.farmerType,
     this.error,
   });
 
@@ -26,6 +34,14 @@ class AuthState {
   final String? userEmail;
   final String? userPhone;
   final String? profileImageUrl;
+  final String? farmName;
+  final String? farmLocation;
+  final String? province;
+  final String? district;
+  final String? city;
+  final double? farmSize;
+  final String? farmSizeUnit;
+  final String? farmerType;
   final String? error;
 
   AuthState copyWith({
@@ -35,6 +51,14 @@ class AuthState {
     String? userEmail,
     String? userPhone,
     String? profileImageUrl,
+    String? farmName,
+    String? farmLocation,
+    String? province,
+    String? district,
+    String? city,
+    double? farmSize,
+    String? farmSizeUnit,
+    String? farmerType,
     String? error,
   }) =>
       AuthState(
@@ -44,6 +68,14 @@ class AuthState {
         userEmail: userEmail ?? this.userEmail,
         userPhone: userPhone ?? this.userPhone,
         profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+        farmName: farmName ?? this.farmName,
+        farmLocation: farmLocation ?? this.farmLocation,
+        province: province ?? this.province,
+        district: district ?? this.district,
+        city: city ?? this.city,
+        farmSize: farmSize ?? this.farmSize,
+        farmSizeUnit: farmSizeUnit ?? this.farmSizeUnit,
+        farmerType: farmerType ?? this.farmerType,
         error: error,
       );
 }
@@ -75,12 +107,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userEmail = data['email'] as String? ?? _storage.userEmail;
       final userPhone = data['phone'] as String? ?? _storage.userPhone;
       final profileImageUrl = data['profile_image_url'] as String?;
+      final farmName = data['farm_name'] as String?;
+      final farmLocation = data['farm_location'] as String?;
+      final province = data['province'] as String?;
+      final district = data['district'] as String?;
+      final city = data['city'] as String?;
+      final farmSize = (data['farm_size'] as num?)?.toDouble();
+      final farmSizeUnit = data['farm_size_unit'] as String?;
+      final farmerType = data['farmer_type'] as String?;
 
       _storage.userId = userId;
       _storage.userName = userName;
       _storage.userEmail = userEmail;
       if (userPhone != null) _storage.userPhone = userPhone;
       if (profileImageUrl != null) _storage.profileImageUrl = profileImageUrl;
+      if (farmName != null) _storage.farmName = farmName;
+      if (farmLocation != null) _storage.farmLocation = farmLocation;
+      if (province != null) _storage.farmProvince = province;
+      if (district != null) _storage.farmDistrict = district;
+      if (city != null) _storage.farmCity = city;
+      if (farmSize != null) _storage.farmSize = farmSize;
+      if (farmSizeUnit != null) _storage.farmSizeUnit = farmSizeUnit;
+      if (farmerType != null) _storage.farmerType = farmerType;
 
       state = state.copyWith(
         status: AuthStatus.authenticated,
@@ -89,6 +137,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userEmail: userEmail,
         userPhone: userPhone,
         profileImageUrl: profileImageUrl,
+        farmName: farmName,
+        farmLocation: farmLocation,
+        province: province,
+        district: district,
+        city: city,
+        farmSize: farmSize,
+        farmSizeUnit: farmSizeUnit,
+        farmerType: farmerType,
       );
     } catch (e) {
       debugPrint('Failed to fetch profile: $e');
@@ -100,6 +156,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userEmail: _storage.userEmail,
         userPhone: _storage.userPhone,
         profileImageUrl: _storage.profileImageUrl,
+        farmName: _storage.farmName,
+        farmLocation: _storage.farmLocation,
+        province: _storage.farmProvince,
+        district: _storage.farmDistrict,
+        city: _storage.farmCity,
+        farmSize: _storage.farmSize,
+        farmSizeUnit: _storage.farmSizeUnit,
+        farmerType: _storage.farmerType,
       );
     }
   }
@@ -226,6 +290,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? email,
     String? phone,
     String? profileImageUrl,
+    String? farmName,
+    String? farmLocation,
+    String? province,
+    String? district,
+    String? city,
+    double? farmSize,
+    String? farmSizeUnit,
+    String? farmerType,
   }) async {
     // Update local state immediately for responsive UI
     state = state.copyWith(
@@ -233,6 +305,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       userEmail: email ?? state.userEmail,
       userPhone: phone ?? state.userPhone,
       profileImageUrl: profileImageUrl ?? state.profileImageUrl,
+      farmName: farmName ?? state.farmName,
+      farmLocation: farmLocation ?? state.farmLocation,
+      province: province ?? state.province,
+      district: district ?? state.district,
+      city: city ?? state.city,
+      farmSize: farmSize ?? state.farmSize,
+      farmSizeUnit: farmSizeUnit ?? state.farmSizeUnit,
+      farmerType: farmerType ?? state.farmerType,
     );
 
     // Save to local storage
@@ -240,12 +320,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (email != null) _storage.userEmail = email;
     if (phone != null) _storage.userPhone = phone;
     if (profileImageUrl != null) _storage.profileImageUrl = profileImageUrl;
+    if (farmName != null) _storage.farmName = farmName;
+    if (farmLocation != null) _storage.farmLocation = farmLocation;
+    if (province != null) _storage.farmProvince = province;
+    if (district != null) _storage.farmDistrict = district;
+    if (city != null) _storage.farmCity = city;
+    if (farmSize != null) _storage.farmSize = farmSize;
+    if (farmSizeUnit != null) _storage.farmSizeUnit = farmSizeUnit;
+    if (farmerType != null) _storage.farmerType = farmerType;
 
     // Sync to backend
     try {
       await _api.updateProfile(
         fullName: name,
         phone: phone,
+        farmName: farmName,
+        farmLocation: farmLocation,
+        province: province,
+        district: district,
+        city: city,
+        farmSize: farmSize,
+        farmSizeUnit: farmSizeUnit,
+        farmerType: farmerType,
       );
     } catch (e) {
       debugPrint('Failed to update profile on backend: $e');

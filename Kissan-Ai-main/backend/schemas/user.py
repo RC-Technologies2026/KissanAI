@@ -45,6 +45,14 @@ class UserOut(BaseModel):
     profile_image_url: Optional[str] = None
     preferred_language: str
     is_onboarded: bool
+    farm_name: Optional[str] = None
+    farm_location: Optional[str] = None
+    province: Optional[str] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
+    farm_size: Optional[float] = None
+    farm_size_unit: Optional[str] = None
+    farmer_type: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -69,3 +77,11 @@ class ProfileUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
     preferred_language: Optional[str] = None
+    farm_name: Optional[str] = None
+    farm_location: Optional[str] = None
+    province: Optional[str] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
+    farm_size: Optional[float] = None
+    farm_size_unit: Optional[str] = None
+    farmer_type: Optional[str] = None

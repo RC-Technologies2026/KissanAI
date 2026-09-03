@@ -128,7 +128,7 @@ async def update_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update user profile (name, phone, language)."""
+    """Update user profile (name, phone, language, farm details)."""
     # Update fields if provided
     if body.full_name is not None:
         current_user.full_name = body.full_name
@@ -141,6 +141,22 @@ async def update_profile(
         current_user.phone = body.phone
     if body.preferred_language is not None:
         current_user.preferred_language = body.preferred_language
+    if body.farm_name is not None:
+        current_user.farm_name = body.farm_name
+    if body.farm_location is not None:
+        current_user.farm_location = body.farm_location
+    if body.province is not None:
+        current_user.province = body.province
+    if body.district is not None:
+        current_user.district = body.district
+    if body.city is not None:
+        current_user.city = body.city
+    if body.farm_size is not None:
+        current_user.farm_size = body.farm_size
+    if body.farm_size_unit is not None:
+        current_user.farm_size_unit = body.farm_size_unit
+    if body.farmer_type is not None:
+        current_user.farmer_type = body.farmer_type
     
     await db.commit()
     await db.refresh(current_user)

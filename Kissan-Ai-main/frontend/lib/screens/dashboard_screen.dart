@@ -245,8 +245,8 @@ class _AppDrawer extends ConsumerWidget {
     final firstName = name.split(' ').first;
     final currentRoute = GoRouterState.of(context).matchedLocation;
     final storage = LocalStorage.instance;
-    final city = storage.farmCity;
-    final province = storage.farmProvince;
+    final city = authState.city ?? storage.farmCity;
+    final province = authState.province ?? storage.farmProvince;
     final location = (city != null && city.isNotEmpty && province != null && province.isNotEmpty)
         ? '$city, $province'
         : (province != null && province.isNotEmpty ? province : 'Location not set');

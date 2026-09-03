@@ -19,16 +19,18 @@ class ProfileScreen extends ConsumerWidget {
 
     final name = authState.userName ?? 'Farmer';
     final email = authState.userEmail ?? '';
-    final phone = storage.userPhone ?? '—';
+    final phone = authState.userPhone ?? storage.userPhone ?? '—';
     final firstName = name.split(' ').first;
-    final farmName = storage.farmName ?? '—';
-    final farmCity = storage.farmCity ?? '';
-    final farmProvince = storage.farmProvince ?? '';
-    final farmSize = storage.farmSize > 0
-        ? '${storage.farmSize.toStringAsFixed(1)} ${storage.farmSizeUnit}'
+    final farmName = authState.farmName ?? storage.farmName ?? '—';
+    final farmCity = authState.city ?? storage.farmCity ?? '';
+    final farmProvince = authState.province ?? storage.farmProvince ?? '';
+    final farmSizeVal = authState.farmSize ?? (storage.farmSize > 0 ? storage.farmSize : null);
+    final farmSizeUnit = authState.farmSizeUnit ?? storage.farmSizeUnit;
+    final farmSize = farmSizeVal != null
+        ? '${farmSizeVal.toStringAsFixed(1)} $farmSizeUnit'
         : '—';
-    final farmerType = storage.farmerType ?? lang.t('farm.new_farmer');
-    final farmLocation = storage.farmLocation ?? '—';
+    final farmerType = authState.farmerType ?? storage.farmerType ?? lang.t('farm.new_farmer');
+    final farmLocation = authState.farmLocation ?? storage.farmLocation ?? '—';
     final profileImageUrl = authState.profileImageUrl;
     final locationDisplay = (farmCity.isNotEmpty && farmProvince.isNotEmpty)
         ? '$farmCity, $farmProvince'

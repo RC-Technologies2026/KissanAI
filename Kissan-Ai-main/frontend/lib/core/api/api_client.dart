@@ -68,11 +68,27 @@ class ApiClient {
     String? fullName,
     String? phone,
     String? preferredLanguage,
+    String? farmName,
+    String? farmLocation,
+    String? province,
+    String? district,
+    String? city,
+    double? farmSize,
+    String? farmSizeUnit,
+    String? farmerType,
   }) =>
       _dio.put('/api/auth/profile', data: {
         if (fullName != null) 'full_name': fullName,
         if (phone != null) 'phone': phone,
         if (preferredLanguage != null) 'preferred_language': preferredLanguage,
+        if (farmName != null) 'farm_name': farmName,
+        if (farmLocation != null) 'farm_location': farmLocation,
+        if (province != null) 'province': province,
+        if (district != null) 'district': district,
+        if (city != null) 'city': city,
+        if (farmSize != null) 'farm_size': farmSize,
+        if (farmSizeUnit != null) 'farm_size_unit': farmSizeUnit,
+        if (farmerType != null) 'farmer_type': farmerType,
       });
 
   Future<Response> uploadProfileImage(String filePath) async {

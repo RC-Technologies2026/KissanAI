@@ -50,18 +50,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     // Personal details
     _nameCtrl = TextEditingController(text: auth.userName ?? '');
-    _phoneCtrl = TextEditingController(text: storage.userPhone ?? '');
+    _phoneCtrl = TextEditingController(text: auth.userPhone ?? storage.userPhone ?? '');
     _emailCtrl = TextEditingController(text: auth.userEmail ?? '');
 
-    // Farm details
-    _farmNameCtrl = TextEditingController(text: storage.farmName ?? '');
-    _farmLocationCtrl = TextEditingController(text: storage.farmLocation ?? '');
-    _province = storage.farmProvince ?? '';
-    _district = storage.farmDistrict ?? '';
-    _city = storage.farmCity ?? '';
-    _farmSize = storage.farmSize > 0 ? storage.farmSize : 5;
-    _sizeUnit = storage.farmSizeUnit;
-    _farmerType = storage.farmerType ?? 'Experienced Farmer';
+    // Farm details — prefer backend (authState) over local storage
+    _farmNameCtrl = TextEditingController(text: auth.farmName ?? storage.farmName ?? '');
+    _farmLocationCtrl = TextEditingController(text: auth.farmLocation ?? storage.farmLocation ?? '');
+    _province = auth.province ?? storage.farmProvince ?? '';
+    _district = auth.district ?? storage.farmDistrict ?? '';
+    _city = auth.city ?? storage.farmCity ?? '';
+    _farmSize = auth.farmSize ?? (storage.farmSize > 0 ? storage.farmSize : 5);
+    _sizeUnit = auth.farmSizeUnit ?? storage.farmSizeUnit;
+    _farmerType = auth.farmerType ?? storage.farmerType ?? 'Experienced Farmer';
 
     // Load profile image if available
     final profileImageUrl = ref.read(authProvider).profileImageUrl;
@@ -126,6 +126,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           email: _emailCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           profileImageUrl: newProfileImageUrl,
+          farmName: _farmNameCtrl.text.trim(),
+          farmLocation: _farmLocationCtrl.text.trim(),
+          province: _province,
+          district: _district,
+          city: _city,
+          farmSize: _farmSize,
+          farmSizeUnit: _sizeUnit,
+          farmerType: _farmerType,
         );
 
     setState(() => _saving = false);
