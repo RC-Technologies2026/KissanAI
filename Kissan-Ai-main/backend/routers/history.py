@@ -29,3 +29,17 @@ async def get_analysis_history(
     records = result.scalars().all()
 
     return records
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_analysis_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all analysis history for the current user."""
+    query = select(AnalysisHistory).where(AnalysisHistory.user_id == current_user.id)
+    result = await db.execute(query)
+    records = result.scalars().all()
+    for record in records:
+        await db.delete(record)
+    await db.commit()

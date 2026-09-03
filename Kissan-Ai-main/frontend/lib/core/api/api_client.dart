@@ -237,6 +237,9 @@ class ApiClient {
         'limit': limit,
       });
 
+  Future<Response> clearHistory() =>
+      _dio.delete('/api/history');
+
   // ─── Plants (houseplants / ornamental plants) ────────────
 
   /// List all plants for the authenticated user.

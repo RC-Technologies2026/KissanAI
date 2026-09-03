@@ -200,6 +200,54 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     return _allItems.where((item) => item.type == type).toList();
   }
 
+  /// Show confirmation dialog and clear all analysis history.
+  Future<void> _confirmClearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Clear All History'),
+        content: const Text('Are you sure you want to delete all analysis history? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await ApiClient.instance.clearHistory();
+        setState(() {
+          _allItems.clear();
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('History cleared'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear history: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   /// Returns icon, bg colour, and icon colour for each history type.
   _TypeStyle _styleFor(HistoryType type) {
     switch (type) {
@@ -253,6 +301,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ),
         ),
         actions: [
+          // Clear history button
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: AppColors.headingText, size: 22),
+            tooltip: 'Clear all history',
+            onPressed: _allItems.isNotEmpty ? _confirmClearHistory : null,
+          ),
           IconButton(
             icon: _loading
                 ? const SizedBox(
