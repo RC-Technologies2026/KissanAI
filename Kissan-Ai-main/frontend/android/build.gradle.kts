@@ -15,11 +15,13 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 
-    // Force all Flutter plugin subprojects (library modules) to compile
+    // Force all Android subprojects (app + Flutter plugin libraries) to compile
     // against SDK 36+ — fixes AAR metadata errors from androidx dependencies.
-    plugins.withId("com.android.library") {
-        extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
-            compileSdk = 36
+    afterEvaluate {
+        val androidExt = extensions.findByName("android") ?: return@afterEvaluate
+        when (androidExt) {
+            is com.android.build.gradle.LibraryExtension -> androidExt.compileSdk = 36
+            is com.android.build.gradle.AppExtension -> androidExt.compileSdk = 36
         }
     }
 }
