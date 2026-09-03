@@ -5,7 +5,7 @@ import '../core/constants/app_colors.dart';
 import '../providers/language_provider.dart';
 import '../providers/weather_provider.dart';
 
-/// Dedicated weather screen with current conditions, hourly & 7-day forecast.
+/// Dedicated weather screen with current conditions, hourly & 3-day forecast.
 class WeatherScreen extends ConsumerStatefulWidget {
   const WeatherScreen({super.key});
 
@@ -431,7 +431,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
               const SizedBox(height: 24),
             ],
 
-            // ── 7-Day Forecast ───────────────────────────────
+            // ── 3-Day Forecast ───────────────────────────────
             if (weather.dailyForecast.isNotEmpty) ...[
               Text(
                 lang.t('weather.daily'),
