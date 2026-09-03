@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/storage/local_storage.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/dashboard_image_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/weather_provider.dart';
 import '../../router/app_router.dart';
@@ -17,6 +18,11 @@ class DashboardScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final lang = ref.watch(languageProvider);
     final firstName = (authState.userName ?? 'Farmer').split(' ').first;
+
+    // Preload all dashboard card images in the background so later opens are instant.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DashboardImageProvider.precacheAll(context);
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -134,49 +140,57 @@ class DashboardScreen extends ConsumerWidget {
                 _FeatureCard(
                   title: lang.t('dashboard.disease_detection'),
                   icon: Icons.bug_report,
-                  imageAsset: 'assets/images/card_disease.png',
+                  imageKey: 'disease',
+                  fallbackAsset: 'assets/images/card_disease.png',
                   route: Routes.diseaseCapture,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.pest_detection'),
                   icon: Icons.science,
-                  imageAsset: 'assets/images/card_pest.png',
+                  imageKey: 'pest',
+                  fallbackAsset: 'assets/images/card_pest.png',
                   route: Routes.pestCapture,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.crop_recommendation'),
                   icon: Icons.agriculture,
-                  imageAsset: 'assets/images/card_crop.png',
+                  imageKey: 'crop',
+                  fallbackAsset: 'assets/images/card_crop.png',
                   route: Routes.cropRecommendation,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.irrigation_guide'),
                   icon: Icons.water_drop,
-                  imageAsset: 'assets/images/card_irrigation.png',
+                  imageKey: 'irrigation',
+                  fallbackAsset: 'assets/images/card_irrigation.png',
                   route: Routes.irrigationGuide,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.ask_kisan'),
                   icon: Icons.chat_bubble,
-                  imageAsset: 'assets/images/card_chat.png',
+                  imageKey: 'chat',
+                  fallbackAsset: 'assets/images/card_chat.png',
                   route: Routes.chat,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.view_history'),
                   icon: Icons.history,
-                  imageAsset: 'assets/images/card_history.png',
+                  imageKey: 'history',
+                  fallbackAsset: 'assets/images/card_history.png',
                   route: Routes.history,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.my_plots'),
                   icon: Icons.landscape_rounded,
-                  imageAsset: 'assets/images/card_crop.png',
+                  imageKey: 'plots',
+                  fallbackAsset: 'assets/images/card_crop.png',
                   route: Routes.plots,
                 ),
                 _FeatureCard(
                   title: lang.t('dashboard.my_plants'),
                   icon: Icons.eco,
-                  imageAsset: 'assets/images/card_crop.png',
+                  imageKey: 'plants',
+                  fallbackAsset: 'assets/images/card_crop.png',
                   route: Routes.plants,
                 ),
               ],
@@ -647,13 +661,15 @@ class _FeatureCard extends StatelessWidget {
   const _FeatureCard({
     required this.title,
     required this.icon,
-    required this.imageAsset,
+    required this.imageKey,
+    required this.fallbackAsset,
     required this.route,
   });
 
   final String title;
   final IconData icon;
-  final String imageAsset;
+  final String imageKey;
+  final String fallbackAsset;
   final String route;
 
   @override
@@ -669,12 +685,23 @@ class _FeatureCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Local asset photo background — works in release APK
-              Image.asset(
-                imageAsset,
+              // Live cached network image — rotates daily, falls back to asset.
+              Image(
+                image: DashboardImageProvider.imageProvider(imageKey),
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  color: AppColors.primary,
+                frameBuilder: (_, child, frame, _) {
+                  if (frame != null) return child;
+                  // Show local asset while the network image loads.
+                  return Image.asset(
+                    fallbackAsset,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(color: AppColors.primary),
+                  );
+                },
+                errorBuilder: (_, _, _) => Image.asset(
+                  fallbackAsset,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(color: AppColors.primary),
                 ),
               ),
 
