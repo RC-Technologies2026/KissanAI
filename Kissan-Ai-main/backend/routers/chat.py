@@ -10,6 +10,7 @@ from schemas.chat import ChatMessageRequest, ChatMessageResponse
 from auth.utils import get_current_user
 from rate_limiter import limiter
 from services.gemini_service import gemini_service
+from prompts import CHAT_USER_PROMPT_TEMPLATE
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -22,9 +23,10 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Call Gemini API ---
+    # --- 1. Call Gemini API with a focused agricultural prompt ---
     try:
-        ai_response = await gemini_service.generate_response(body.message)
+        prompt = CHAT_USER_PROMPT_TEMPLATE.format(message=body.message)
+        ai_response = await gemini_service.generate_response(prompt)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -187,6 +187,19 @@ class ApiClient {
   Future<Response> getIrrigationGuide(String cropRecommendationId) =>
       _dio.get('/api/irrigation/guide/$cropRecommendationId');
 
+  Future<Response> getDirectIrrigationGuide({
+    required String plotId,
+    required String cropName,
+    String? waterAvailability,
+    String? growthStage,
+  }) =>
+      _dio.post('/api/irrigation/direct-guide', data: {
+        'plot_id': plotId,
+        'crop_name': cropName,
+        if (waterAvailability != null) 'water_availability': waterAvailability,
+        if (growthStage != null) 'growth_stage': growthStage,
+      });
+
   // ─── Chat ────────────────────────────────────────────────
 
   Future<Response> sendChatMessage(String message) =>

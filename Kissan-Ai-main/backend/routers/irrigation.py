@@ -7,7 +7,13 @@ from models.crop_recommendation import CropRecommendation
 from models.irrigation_guidance import IrrigationGuidance
 from models.analysis_history import AnalysisHistory
 from models.user import User
-from schemas.crop import CropRecommendationRequest, CropRecommendationResponse, IrrigationGuideResponse
+from schemas.crop import (
+    CropRecommendationRequest,
+    CropRecommendationResponse,
+    IrrigationGuideResponse,
+    DirectIrrigationGuideRequest,
+    DirectIrrigationGuideResponse,
+)
 from auth.utils import get_current_user
 from rules_engine.crop_rules import (
     get_crop_recommendation,
@@ -138,3 +144,82 @@ async def get_irrigation_guide(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     return guidance
+
+
+@router.post("/direct-guide", response_model=DirectIrrigationGuideResponse, status_code=status.HTTP_201_CREATED)
+async def direct_irrigation_guide(
+    body: DirectIrrigationGuideRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Standalone irrigation guide for a selected plot + crop.
+    Works like crop recommendation but focused only on irrigation scheduling.
+    """
+    # --- 1. Look up the plot ---
+    result = await db.execute(select(Plot).where(Plot.id == body.plot_id))
+    plot = result.scalar_one_or_none()
+    if not plot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plot not found")
+    if plot.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    crop_name = body.crop_name.strip()
+
+    # --- 2. Generate guidance from rules engine ---
+    irrigation_data = get_irrigation_guidance(crop_name, water_availability=body.water_availability)
+    fertilizer = get_fertilizer_guidance(crop_name)
+    pest_alerts = get_pest_disease_alerts(crop_name)
+    crop_meta = get_crop_metadata(crop_name)
+
+    # Pick a sensible growth stage if not provided.
+    growth_stage = body.growth_stage
+    if not growth_stage:
+        schedule_text = irrigation_data.get("schedule", "")
+        if "seedling" in schedule_text.lower():
+            growth_stage = "Seedling"
+        elif "vegetative" in schedule_text.lower():
+            growth_stage = "Vegetative"
+        elif "flowering" in schedule_text.lower() or "reproductive" in schedule_text.lower():
+            growth_stage = "Reproductive"
+        elif "tillering" in schedule_text.lower():
+            growth_stage = "Tillering"
+        else:
+            growth_stage = "Active growth"
+
+    # --- 3. Log to ANALYSIS_HISTORY ---
+    history_entry = AnalysisHistory(
+        user_id=current_user.id,
+        analysis_type="irrigation",
+        reference_id=plot.id,
+        result_snapshot={
+            "crop_name": crop_name,
+            "plot_name": plot.name,
+            "soil_type": plot.soil_type,
+            "water_availability": body.water_availability,
+            "growth_stage": growth_stage,
+            "schedule": irrigation_data.get("schedule"),
+            "water_amount_liters": irrigation_data.get("water_amount_liters"),
+            "method": irrigation_data.get("method"),
+            "note": irrigation_data.get("note"),
+            "fertilizer": fertilizer,
+            "pest_alerts": pest_alerts,
+            "duration_days": crop_meta.get("duration_days"),
+        },
+    )
+    db.add(history_entry)
+    await db.commit()
+
+    return DirectIrrigationGuideResponse(
+        plot_id=plot.id,
+        crop_name=crop_name.title(),
+        schedule=irrigation_data.get("schedule", "Irrigate as needed based on soil moisture."),
+        water_amount_liters=irrigation_data.get("water_amount_liters", 0.0),
+        method=irrigation_data.get("method"),
+        note=irrigation_data.get("note"),
+        fertilizer=fertilizer,
+        pest_alerts=pest_alerts,
+        growth_stage=growth_stage,
+        next_irrigation=irrigation_data.get("next_irrigation", "Check soil moisture daily."),
+        duration_days=crop_meta.get("duration_days"),
+    )

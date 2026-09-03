@@ -83,18 +83,58 @@ async def detect_disease(
     await db.refresh(image)
 
     # --- 6. Structured Multi-Model Fallback Leaf Diagnosis in Requested Language ---
-    result = await gemini_service.diagnose_leaf_image(
-        image_bytes=contents,
-        mime_type=content_type,
-        language=selected_language,
-        timeout=45.0,
-        crop_name=crop_name,
-    )
+    try:
+        result = await gemini_service.diagnose_leaf_image(
+            image_bytes=contents,
+            mime_type=content_type,
+            language=selected_language,
+            timeout=45.0,
+            crop_name=crop_name,
+        )
+    except Exception as gemini_err:
+        # Gemini or network failure — return a graceful fallback response
+        # so the app never shows a raw server error to the farmer.
+        return DiseaseDetectionResponse(
+            id=None,
+            image_id=image.id,
+            crop_name=crop_name or "Unknown crop",
+            disease_name="Diagnosis temporarily unavailable",
+            disease_category=None,
+            confidence_score=0.0,
+            model_version=None,
+            detected_at=None,
+            diagnosis=(
+                "We could not complete the AI diagnosis right now. "
+                f"Reason: {str(gemini_err)}\n\n"
+                "Please try again in a moment with a clear photo in daylight."
+            ),
+        )
 
     # --- 6b. Handle genuinely-unusable image fallback ---
     if isinstance(result, DiseaseFallbackResponse):
         # Image was too blurry / dark / no plant visible — ask farmer to retake.
-        return result
+        # Return as a valid DiseaseDetectionResponse so the frontend can render
+        # the low-confidence advisory UI instead of a raw server error.
+        candidates = result.top_candidates or []
+        extra = ""
+        if candidates:
+            extra = f" Possible matches: {', '.join(candidates)}."
+        diagnosis = (
+            f"{result.message}{extra}\n\n"
+            "Please take a clearer photo in daylight, close to the affected leaf, "
+            "and make sure the plant is visible."
+        )
+        return DiseaseDetectionResponse(
+            id=None,
+            image_id=image.id,
+            crop_name=crop_name or "Unknown crop",
+            disease_name="Photo unclear — please retake",
+            disease_category=None,
+            confidence_score=0.0,
+            model_version=None,
+            detected_at=None,
+            diagnosis=diagnosis,
+        )
 
     parsed_data, formatted_markdown, model_used = result
 

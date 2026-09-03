@@ -84,18 +84,58 @@ async def detect_pest(
     await db.refresh(image)
 
     # --- 7. Structured Multi-Model Fallback Pest Identification in Requested Language ---
-    result = await gemini_service.diagnose_pest_image(
-        image_bytes=contents,
-        mime_type=content_type,
-        language=selected_language,
-        timeout=45.0,
-        crop_name=crop_name,
-    )
+    try:
+        result = await gemini_service.diagnose_pest_image(
+            image_bytes=contents,
+            mime_type=content_type,
+            language=selected_language,
+            timeout=45.0,
+            crop_name=crop_name,
+        )
+    except Exception as gemini_err:
+        # Gemini or network failure — return a graceful fallback response
+        # so the app never shows a raw server error to the farmer.
+        return PestDetectionResponse(
+            id=None,
+            image_id=image.id,
+            crop_name=crop_name or "Unknown crop",
+            pest_name="Identification temporarily unavailable",
+            pest_category=None,
+            confidence_score=0.0,
+            model_version=None,
+            detected_at=None,
+            diagnosis=(
+                "We could not complete the AI pest identification right now. "
+                f"Reason: {str(gemini_err)}\n\n"
+                "Please try again in a moment with a clear photo in daylight."
+            ),
+        )
 
     # --- 7b. Handle genuinely-unusable image fallback ---
     if isinstance(result, PestFallbackResponse):
         # Image was too blurry / dark / no plant visible — ask farmer to retake.
-        return result
+        # Return as a valid PestDetectionResponse so the frontend can render
+        # the low-confidence advisory UI instead of a raw server error.
+        candidates = result.top_candidates or []
+        extra = ""
+        if candidates:
+            extra = f" Possible matches: {', '.join(candidates)}."
+        diagnosis = (
+            f"{result.message}{extra}\n\n"
+            "Please take a clearer photo in daylight, close to the affected insect or damage, "
+            "and make sure the crop is visible."
+        )
+        return PestDetectionResponse(
+            id=None,
+            image_id=image.id,
+            crop_name=crop_name or "Unknown crop",
+            pest_name="Photo unclear — please retake",
+            pest_category=None,
+            confidence_score=0.0,
+            model_version=None,
+            detected_at=None,
+            diagnosis=diagnosis,
+        )
 
     parsed_data, formatted_markdown, model_used = result
 

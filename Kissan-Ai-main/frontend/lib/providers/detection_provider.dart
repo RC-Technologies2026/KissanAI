@@ -136,6 +136,14 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
     if (e.response?.statusCode == 401) {
       return 'Session expired. Please login again.';
     }
+    // Surface the actual server message when available (e.g. 5xx / 4xx detail).
+    final data = e.response?.data;
+    if (data is Map) {
+      final detail = data['detail']?.toString();
+      if (detail != null && detail.isNotEmpty) return detail;
+      final message = data['message']?.toString();
+      if (message != null && message.isNotEmpty) return message;
+    }
     if (e.response?.statusCode != null && e.response!.statusCode! >= 500) {
       return 'Server error. Please try again later.';
     }

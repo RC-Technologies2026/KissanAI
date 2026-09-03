@@ -459,6 +459,25 @@ def get_crop_recommendation(
     return crops, reasoning
 
 
+def _derive_next_irrigation(crop_key: str, schedule: str) -> str:
+    """Derive a concise 'next irrigation' hint from the schedule text."""
+    schedule_lower = schedule.lower()
+    # Extract the first interval mentioned in the schedule.
+    import re
+    intervals = re.findall(r"every\s+(\d+)[-\s]*(\d*)\s*days", schedule_lower)
+    if intervals:
+        first, second = intervals[0]
+        days = int(second) if second else int(first)
+        if crop_key in ("rice", "sugarcane", "banana"):
+            return f"Within {days} days (keep soil consistently moist)"
+        return f"Every {days} days or when top soil feels dry"
+    if "rain-fed" in schedule_lower:
+        return "Only if no rain for 2+ weeks"
+    if "standing water" in schedule_lower:
+        return "Maintain standing water; check every 5-7 days"
+    return "Check soil moisture every 2-3 days"
+
+
 def get_irrigation_guidance(crop_name: str, water_availability: Optional[str] = None) -> dict:
     """
     Get irrigation guidance for a given crop, with an advisory note when the
@@ -466,6 +485,10 @@ def get_irrigation_guidance(crop_name: str, water_availability: Optional[str] = 
     """
     crop_key = crop_name.lower().strip()
     guidance = dict(IRRIGATION_RULES.get(crop_key, DEFAULT_IRRIGATION))
+
+    # Add a friendly next-irrigation hint if not already present.
+    if "next_irrigation" not in guidance:
+        guidance["next_irrigation"] = _derive_next_irrigation(crop_key, guidance.get("schedule", ""))
 
     water_key = _normalize_water(water_availability)
     crop_need = CROPS.get(crop_key, {}).get("water_need", "medium")

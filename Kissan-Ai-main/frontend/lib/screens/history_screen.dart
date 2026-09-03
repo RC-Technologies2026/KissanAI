@@ -82,13 +82,18 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           type = HistoryType.pest;
           title = snapshot['pest_name'] as String? ?? 'Pest Detection';
           crop = snapshot['crop_name'] as String? ?? '';
-        } else if (analysisType.contains('crop') || analysisType.contains('irrigation')) {
-          type = analysisType.contains('irrigation')
-              ? HistoryType.irrigation
-              : HistoryType.crop;
-          final recommendedCrops = snapshot['recommended_crops'] as String? ?? '';
+        } else if (analysisType.contains('crop')) {
+          type = HistoryType.crop;
+          final recommendedCropsRaw = snapshot['recommended_crops'];
+          final recommendedCrops = _stringifyListOrString(recommendedCropsRaw);
           title = recommendedCrops.isNotEmpty ? recommendedCrops : 'Crop Recommendation';
           crop = snapshot['soil_type'] as String? ?? '';
+        } else if (analysisType.contains('irrigation')) {
+          type = HistoryType.irrigation;
+          final cropName = snapshot['crop_name'] as String? ?? '';
+          final plotName = snapshot['plot_name'] as String? ?? '';
+          title = cropName.isNotEmpty ? 'Irrigation: $cropName' : 'Irrigation Guide';
+          crop = plotName;
         } else {
           type = HistoryType.crop;
           title = 'Analysis';
@@ -177,6 +182,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Safely convert a backend value that may be a String or List into a String.
+  String _stringifyListOrString(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is List) {
+      return value.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).join(', ');
+    }
+    return value.toString();
   }
 
   List<_HistoryItem> get _filteredItems {

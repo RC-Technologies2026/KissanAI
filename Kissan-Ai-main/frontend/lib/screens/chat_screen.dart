@@ -34,9 +34,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   final List<String> _suggestions = [
     'What crop should I plant this season?',
-    'How to detect wheat rust?',
-    'Weather forecast for today?',
-    'Best pesticide for cotton?',
+    'Best fertilizer for wheat in Pakistan?',
+    'How to control cotton bollworm?',
+    'Irrigation schedule for rice',
   ];
 
   @override

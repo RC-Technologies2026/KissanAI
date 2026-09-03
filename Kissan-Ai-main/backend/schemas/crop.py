@@ -30,3 +30,24 @@ class IrrigationGuideResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DirectIrrigationGuideRequest(BaseModel):
+    plot_id: UUID
+    crop_name: str
+    water_availability: Optional[str] = "Medium"
+    growth_stage: Optional[str] = None
+
+
+class DirectIrrigationGuideResponse(BaseModel):
+    plot_id: UUID
+    crop_name: str
+    schedule: str
+    water_amount_liters: float
+    method: Optional[str] = None
+    note: Optional[str] = None
+    fertilizer: Optional[str] = None
+    pest_alerts: Optional[str] = None
+    growth_stage: Optional[str] = None
+    next_irrigation: Optional[str] = None
+    duration_days: Optional[int] = None
