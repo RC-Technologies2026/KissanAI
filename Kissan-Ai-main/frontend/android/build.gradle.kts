@@ -17,11 +17,12 @@ subprojects {
 
     // Force all Android subprojects (app + Flutter plugin libraries) to compile
     // against SDK 36+ — fixes AAR metadata errors from androidx dependencies.
+    // Uses AGP 9.x new DSL API classes.
     afterEvaluate {
         val androidExt = extensions.findByName("android") ?: return@afterEvaluate
         when (androidExt) {
-            is com.android.build.gradle.LibraryExtension -> androidExt.compileSdk = 36
-            is com.android.build.gradle.AppExtension -> androidExt.compileSdk = 36
+            is com.android.build.api.dsl.LibraryExtension -> androidExt.compileSdk = 36
+            is com.android.build.api.dsl.ApplicationExtension -> androidExt.compileSdk = 36
         }
     }
 }
