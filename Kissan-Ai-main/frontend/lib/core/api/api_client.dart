@@ -226,6 +226,9 @@ class ApiClient {
   Future<Response> getChatHistory({int limit = 50}) =>
       _dio.get('/api/chat', queryParameters: {'limit': limit});
 
+  Future<Response> clearChatHistory() =>
+      _dio.delete('/api/chat');
+
   // ─── History ─────────────────────────────────────────────
 
   Future<Response> getHistoryList({String? analysisType, int limit = 50}) =>

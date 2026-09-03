@@ -67,3 +67,20 @@ async def get_chat_history(
     result = await db.execute(query)
     records = result.scalars().all()
     return records
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_chat_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all chat history for the current user."""
+    query = (
+        select(ChatHistory)
+        .where(ChatHistory.user_id == current_user.id)
+    )
+    result = await db.execute(query)
+    records = result.scalars().all()
+    for record in records:
+        await db.delete(record)
+    await db.commit()

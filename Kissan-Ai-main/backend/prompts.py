@@ -65,6 +65,7 @@ Guidelines:
 - For market/weather/general advice, be practical and region-aware.
 - If the question is not related to farming, politely steer back to agriculture.
 - Do NOT use heavy jargon. Use simple, farmer-friendly language.
+- Do NOT use markdown formatting like **bold** or *italic*. Write plain text only. Use simple dashes (-) for bullet points.
 
 Farmer's question: {message}
 """

@@ -58,6 +58,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return '$h:${t.minute.toString().padLeft(2, '0')} $am';
   }
 
+  /// Strip markdown **bold** and *italic* markers for clean plain-text display.
+  String _cleanMarkdown(String text) {
+    return text
+        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')
+        .replaceAll(RegExp(r'\*(.+?)\*'), r'$1')
+        .replaceAll(RegExp(r'__(.+?)__'), r'$1')
+        .replaceAll(RegExp(r'_(.+?)_'), r'$1');
+  }
+
   Future<void> _loadHistory() async {
     try {
       final res = await ApiClient.instance.getChatHistory(limit: 20);
@@ -68,12 +77,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       for (final item in items.reversed) {
         final msg = item as Map<String, dynamic>;
         history.add(_ChatMessage(
-          text: msg['message'] as String,
+          text: _cleanMarkdown(msg['message'] as String),
           isUser: true,
           time: _formatTime(msg['created_at'] as String?),
         ));
         history.add(_ChatMessage(
-          text: msg['response'] as String,
+          text: _cleanMarkdown(msg['response'] as String),
           isUser: false,
           time: _formatTime(msg['created_at'] as String?),
         ));
@@ -139,7 +148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       if (mounted) {
         setState(() {
-          _messages.add(_ChatMessage(text: reply, isUser: false, time: _now()));
+          _messages.add(_ChatMessage(text: _cleanMarkdown(reply), isUser: false, time: _now()));
           _isLoading = false;
         });
         _scrollToBottom();
@@ -155,6 +164,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _isLoading = false;
         });
         _scrollToBottom();
+      }
+    }
+  }
+
+  /// Show confirmation dialog and clear all chat history.
+  Future<void> _confirmClearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Clear Chat History'),
+        content: const Text('Are you sure you want to delete all chat messages? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await ApiClient.instance.clearChatHistory();
+        setState(() {
+          _messages.clear();
+          final lang = ref.read(languageProvider);
+          _messages.add(_ChatMessage(
+            text: lang.t('chat.welcome'),
+            isUser: false,
+            time: _now(),
+          ));
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Chat history cleared'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear history: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     }
   }
@@ -189,6 +252,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
+          // Clear history button
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: AppColors.headingText, size: 22),
+            tooltip: 'Clear chat history',
+            onPressed: _messages.length > 1 ? _confirmClearHistory : null,
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Container(
