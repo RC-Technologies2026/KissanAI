@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class WeatherResponse(BaseModel):
@@ -12,3 +12,21 @@ class WeatherResponse(BaseModel):
     description: str
     cached: bool
     cached_at: Optional[datetime] = None
+
+
+class DailyForecastItem(BaseModel):
+    day: str
+    high: int
+    low: int
+    condition: str
+    condition_icon: str
+    rain_chance: int
+    humidity: int
+    wind_speed: int
+
+
+class WeatherForecastResponse(BaseModel):
+    location: str
+    current: WeatherResponse
+    daily: List[DailyForecastItem]
+    alerts: List[str] = []

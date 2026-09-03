@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/core_providers.dart';
 import '../screens/detection/camera_picker_screen.dart';
 
@@ -115,7 +116,7 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
     } on DioException catch (e) {
       state = DetectionState(
         status: DetectionStatus.failure,
-        errorMessage: _friendlyError(e),
+        errorMessage: AppError.fromException(e),
       );
     } catch (_) {
       state = const DetectionState(
@@ -123,31 +124,6 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
         errorMessage: 'Could not analyze the photo. Please try again.',
       );
     }
-  }
-
-  String _friendlyError(DioException e) {
-    if (e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.receiveTimeout) {
-      return 'Server is taking too long. Please try again.';
-    }
-    if (e.type == DioExceptionType.connectionError) {
-      return 'Cannot reach server. Please check your internet connection.';
-    }
-    if (e.response?.statusCode == 401) {
-      return 'Session expired. Please login again.';
-    }
-    // Surface the actual server message when available (e.g. 5xx / 4xx detail).
-    final data = e.response?.data;
-    if (data is Map) {
-      final detail = data['detail']?.toString();
-      if (detail != null && detail.isNotEmpty) return detail;
-      final message = data['message']?.toString();
-      if (message != null && message.isNotEmpty) return message;
-    }
-    if (e.response?.statusCode != null && e.response!.statusCode! >= 500) {
-      return 'Server error. Please try again later.';
-    }
-    return e.message ?? 'An unexpected error occurred.';
   }
 
   void reset() => state = const DetectionState();

@@ -237,8 +237,37 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Weather alert
-                  if (weather.isBlocked)
+                  // Weather alerts from forecast
+                  if (weather.alerts.isNotEmpty)
+                    ...weather.alerts.map((alert) => Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: Color(0xFFFFE082), size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                alert,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFFFFE082),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ))
+                  else if (weather.isBlocked)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 10),

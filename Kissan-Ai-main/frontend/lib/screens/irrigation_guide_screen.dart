@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/language_provider.dart';
 import '../providers/plot_provider.dart';
 
@@ -94,19 +95,10 @@ class _IrrigationGuideScreenState
         });
       }
     } on DioException catch (e) {
-      final data = e.response?.data;
-      String msg = 'Failed to get irrigation guide.';
-      if (data is Map) {
-        msg = data['detail']?.toString() ??
-            data['message']?.toString() ??
-            msg;
-      } else if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        msg = 'Server is taking too long. Please try again.';
-      }
+      final msg = AppError.fromException(e);
       if (mounted) setState(() => _error = msg);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Something went wrong: $e');
+      if (mounted) setState(() => _error = AppError.fromException(e));
     } finally {
       if (mounted && _loading) setState(() => _loading = false);
     }

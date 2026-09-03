@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
+import '../core/utils/error_handler.dart';
 
 /// Immutable state for plot management.
 class PlotState {
@@ -50,7 +51,7 @@ class PlotNotifier extends StateNotifier<PlotState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to load plots: $e',
+        error: AppError.fromException(e),
       );
     }
   }
@@ -85,7 +86,7 @@ class PlotNotifier extends StateNotifier<PlotState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to create plot: $e',
+        error: AppError.fromException(e),
       );
       return false;
     }
@@ -109,7 +110,7 @@ class PlotNotifier extends StateNotifier<PlotState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to update plot: $e',
+        error: AppError.fromException(e),
       );
       return false;
     }
@@ -129,7 +130,7 @@ class PlotNotifier extends StateNotifier<PlotState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to delete plot: $e',
+        error: AppError.fromException(e),
       );
       return false;
     }

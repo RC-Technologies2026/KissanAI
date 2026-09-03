@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/dio_client.dart';
 import '../core/storage/local_storage.dart';
+import '../core/utils/error_handler.dart';
 import 'core_providers.dart';
 
 /// Auth state — authenticated / unauthenticated / loading.
@@ -159,12 +160,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on DioException catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: _networkMessage(e, fallback: 'Registration failed. Please try again.'),
+        error: AppError.fromException(e),
       );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'Registration failed. Please check your connection.',
+        error: AppError.fromException(e),
       );
     }
   }
@@ -204,14 +205,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Fetch full profile from backend
       await _fetchProfile();
     } on DioException catch (e) {
+      // Special case for login: show "Invalid email or password" for 401
+      final msg = (e.response?.statusCode == 401)
+          ? 'Invalid email or password.'
+          : AppError.fromException(e);
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: _networkMessage(e, fallback: 'Login failed. Please try again.'),
+        error: msg,
       );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
-        error: 'Login failed. Please check your connection.',
+        error: AppError.fromException(e),
       );
     }
   }
@@ -252,29 +257,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.clearAuth();
     _storage.onboardingComplete = false;
     state = const AuthState(status: AuthStatus.unauthenticated);
-  }
-
-  /// Build a user-friendly error message from a [DioException].
-  String _networkMessage(DioException e, {String fallback = 'Something went wrong.'}) {
-    // Connection-level errors (no response from server)
-    if (e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.unknown) {
-      return 'Server is taking too long to respond. It may be waking up from sleep — please try again in 30 seconds.';
-    }
-    // Server responded with an error
-    final statusCode = e.response?.statusCode;
-    final detail = e.response?.data is Map
-        ? e.response!.data['detail'] as String?
-        : null;
-    if (statusCode == 401) {
-      return detail ?? 'Invalid email or password.';
-    } else if (statusCode == 422) {
-      return detail ?? 'Please check the information you entered.';
-    } else if (statusCode != null && statusCode >= 500) {
-      return 'Server error ($statusCode). Please try again in a moment.';
-    }
-    return detail ?? fallback;
   }
 }
 

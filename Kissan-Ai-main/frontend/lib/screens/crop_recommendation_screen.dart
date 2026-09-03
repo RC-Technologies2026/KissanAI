@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/language_provider.dart';
 import '../providers/plot_provider.dart';
 import '../router/app_router.dart';
@@ -203,7 +204,7 @@ class _CropRecommendationScreenState
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Failed to get recommendations. Please check your connection and try again.';
+          _error = AppError.fromException(e);
         });
       }
     }

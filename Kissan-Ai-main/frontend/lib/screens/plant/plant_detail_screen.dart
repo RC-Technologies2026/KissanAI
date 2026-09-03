@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/error_handler.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/plant_provider.dart';
 import '../../widgets/answer_card.dart';
@@ -48,7 +49,7 @@ class _PlantDetailScreenState extends ConsumerState<PlantDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(AppError.short(e))),
         );
       }
     } finally {

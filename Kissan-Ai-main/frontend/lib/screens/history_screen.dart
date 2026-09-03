@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../core/utils/error_handler.dart';
 
 /// History item model.
 class _HistoryItem {
@@ -117,7 +118,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         });
       }
     } on DioException catch (e) {
-      final errorMsg = _resolveDioError(e);
+      final errorMsg = AppError.fromException(e);
 
       // Auto-retry once after 5s on timeout (Render cold-start wake-up).
       if (!_retryAttempted && _isTimeoutError(e)) {
@@ -139,7 +140,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Something went wrong: $e';
+          _error = AppError.fromException(e);
         });
       }
     }
@@ -154,20 +155,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   /// Maps a DioException to a user-friendly error string.
   String _resolveDioError(DioException e) {
-    if (_isTimeoutError(e)) {
-      return 'Server is waking up, please retry in a moment.';
-    }
-    if (e.response?.statusCode == 401) {
-      return 'Your session has expired. Please log in again.';
-    }
-    if (e.type == DioExceptionType.connectionError) {
-      return 'Cannot reach the server. Check your internet connection.';
-    }
-    // Surface the real message for debugging.
-    final detail = e.response?.data is Map
-        ? (e.response!.data as Map)['detail']
-        : null;
-    return detail?.toString() ?? e.message ?? 'Failed to load history.';
+    return AppError.fromException(e);
   }
 
   String _formatDate(String iso) {
@@ -239,7 +227,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to clear history: $e'),
+              content: Text(AppError.short(e)),
               backgroundColor: AppColors.error,
             ),
           );

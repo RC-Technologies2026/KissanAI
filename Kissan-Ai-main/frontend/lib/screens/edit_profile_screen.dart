@@ -7,6 +7,7 @@ import '../core/constants/app_colors.dart';
 import '../core/data/pakistan_locations.dart';
 import '../core/storage/local_storage.dart';
 import '../core/api/api_client.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_text_field.dart';
 import '../widgets/cascading_dropdown.dart';
@@ -96,7 +97,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to upload image: $e'),
+              content: Text(AppError.short(e)),
               backgroundColor: AppColors.error,
             ),
           );

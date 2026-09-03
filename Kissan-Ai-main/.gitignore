@@ -19,7 +19,7 @@ build/
 develop-eggs/
 downloads/
 eggs/
-lib/
+# lib/  # commented out — was blocking Flutter frontend lib/
 lib64/
 parts/
 sdist/

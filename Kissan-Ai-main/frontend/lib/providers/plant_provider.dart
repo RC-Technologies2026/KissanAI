@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/core_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -141,12 +142,12 @@ class PlantNotifier extends StateNotifier<PlantState> {
     } on DioException catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: _friendlyError(e),
+        errorMessage: AppError.fromException(e),
       );
-    } catch (_) {
+    } catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: 'Could not load plants. Please try again.',
+        errorMessage: AppError.fromException(e),
       );
     }
   }
@@ -174,10 +175,10 @@ class PlantNotifier extends StateNotifier<PlantState> {
         status: PlantStatus.failure,
         errorMessage: _friendlyError(e),
       );
-    } catch (_) {
+    } catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: 'Could not create plant. Please try again.',
+        errorMessage: AppError.fromException(e),
       );
     }
     return false;
@@ -222,10 +223,10 @@ class PlantNotifier extends StateNotifier<PlantState> {
         status: PlantStatus.failure,
         errorMessage: _friendlyError(e),
       );
-    } catch (_) {
+    } catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: 'Could not analyze the photo. Please try again.',
+        errorMessage: AppError.fromException(e),
       );
     }
   }
@@ -235,20 +236,7 @@ class PlantNotifier extends StateNotifier<PlantState> {
   // ── Helpers ──────────────────────────────────────────────
 
   String _friendlyError(DioException e) {
-    if (e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.receiveTimeout) {
-      return 'Server is taking too long. Please try again.';
-    }
-    if (e.type == DioExceptionType.connectionError) {
-      return 'Cannot reach server. Please check your internet connection.';
-    }
-    if (e.response?.statusCode == 401) {
-      return 'Session expired. Please login again.';
-    }
-    if (e.response?.statusCode != null && e.response!.statusCode! >= 500) {
-      return 'Server error. Please try again later.';
-    }
-    return e.message ?? 'An unexpected error occurred.';
+    return AppError.fromException(e);
   }
 
   PlantDiagnosisData _parseDiagnosis(String plantId, Map data) {

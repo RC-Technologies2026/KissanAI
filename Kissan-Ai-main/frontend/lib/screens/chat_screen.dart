@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/language_provider.dart';
 
 /// Chat message model.
@@ -157,7 +158,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (mounted) {
         setState(() {
           _messages.add(_ChatMessage(
-            text: 'Connection error. Please try again.',
+            text: AppError.fromException(e),
             isUser: false,
             time: _now(),
           ));
@@ -213,7 +214,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to clear history: $e'),
+              content: Text(AppError.short(e)),
               backgroundColor: AppColors.error,
             ),
           );

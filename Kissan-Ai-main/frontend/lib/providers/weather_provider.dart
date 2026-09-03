@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/location_service.dart';
+import '../core/utils/error_handler.dart';
 import 'core_providers.dart';
 
 /// Daily forecast entry.
@@ -61,6 +62,7 @@ class WeatherState {
     this.error,
     this.hourlyForecast = const [],
     this.dailyForecast = const [],
+    this.alerts = const [],
   });
 
   final int temperatureC;
@@ -79,6 +81,7 @@ class WeatherState {
   final String? error;
   final List<HourlyForecast> hourlyForecast;
   final List<DailyForecast> dailyForecast;
+  final List<String> alerts;
 
   bool get isBlocked => rainProbability > 60 || windSpeedKmh > 15;
 
@@ -107,6 +110,7 @@ class WeatherState {
     String? error,
     List<HourlyForecast>? hourlyForecast,
     List<DailyForecast>? dailyForecast,
+    List<String>? alerts,
   }) =>
       WeatherState(
         temperatureC: temperatureC ?? this.temperatureC,
@@ -125,6 +129,7 @@ class WeatherState {
         error: error ?? this.error,
         hourlyForecast: hourlyForecast ?? this.hourlyForecast,
         dailyForecast: dailyForecast ?? this.dailyForecast,
+        alerts: alerts ?? this.alerts,
       );
 }
 
@@ -151,9 +156,9 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       final double lat = resolved.lat;
       final double lon = resolved.lon;
 
-      // Call backend weather endpoint with lat/lon
+      // Call backend forecast endpoint (includes current + 3-day + alerts)
       final response = await _dio.get(
-        '/api/weather/current',
+        '/api/weather/forecast',
         queryParameters: {
           'lat': lat,
           'lon': lon,
@@ -162,14 +167,32 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
       final data = response.data;
 
-      // Backend returns flat WeatherResponse:
-      // {location, temperature, humidity, rain_probability, wind_speed, description, cached}
-      final temperature = (data['temperature'] as num?)?.round() ?? 32;
-      final humidity = (data['humidity'] as num?)?.round() ?? 65;
-      final rainProb = (data['rain_probability'] as num?)?.round() ?? 20;
-      final windSpeed = (data['wind_speed'] as num?)?.round() ?? 8;
-      final description = data['description'] as String? ?? 'Clear';
-      final location = data['location'] as String? ?? resolved.label;
+      // Parse current weather from forecast response
+      final current = data['current'] ?? data;
+      final temperature = (current['temperature'] as num?)?.round() ?? 32;
+      final humidity = (current['humidity'] as num?)?.round() ?? 65;
+      final rainProb = (current['rain_probability'] as num?)?.round() ?? 20;
+      final windSpeed = (current['wind_speed'] as num?)?.round() ?? 8;
+      final description = current['description'] as String? ?? 'Clear';
+      final location = current['location'] as String? ?? resolved.label;
+
+      // Parse 3-day forecast
+      final dailyList = (data['daily'] as List?) ?? [];
+      final dailyForecasts = dailyList.map<DailyForecast>((d) {
+        return DailyForecast(
+          day: d['day']?.toString() ?? '',
+          high: (d['high'] as num?)?.round() ?? 30,
+          low: (d['low'] as num?)?.round() ?? 20,
+          condition: d['condition']?.toString() ?? 'Clear',
+          conditionIcon: _conditionToIcon(d['condition_icon']?.toString() ?? 'clear'),
+          rainChance: (d['rain_chance'] as num?)?.round() ?? 0,
+          humidity: (d['humidity'] as num?)?.round() ?? 65,
+          windSpeed: (d['wind_speed'] as num?)?.round() ?? 0,
+        );
+      }).toList();
+
+      // Parse alerts
+      final alertList = (data['alerts'] as List?)?.cast<String>() ?? [];
 
       state = WeatherState(
         temperatureC: temperature,
@@ -186,12 +209,13 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
         conditionIcon: _conditionToIcon(description),
         loading: false,
         hourlyForecast: const <HourlyForecast>[],
-        dailyForecast: const <DailyForecast>[],
+        dailyForecast: dailyForecasts,
+        alerts: alertList,
       );
     } catch (e) {
       state = state.copyWith(
         loading: false,
-        error: 'Failed to fetch weather: $e',
+        error: AppError.fromException(e),
       );
     }
   }

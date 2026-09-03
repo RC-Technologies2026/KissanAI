@@ -6,6 +6,7 @@ import '../core/constants/app_constants.dart';
 import '../core/data/pakistan_locations.dart';
 import '../core/services/location_service.dart';
 import '../core/storage/local_storage.dart';
+import '../core/utils/error_handler.dart';
 import '../providers/auth_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/onboarding_provider.dart';
@@ -142,7 +143,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Location error: $e')),
+          SnackBar(content: Text(AppError.short(e))),
         );
       }
     } finally {
