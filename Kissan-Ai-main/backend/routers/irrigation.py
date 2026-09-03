@@ -9,7 +9,13 @@ from models.analysis_history import AnalysisHistory
 from models.user import User
 from schemas.crop import CropRecommendationRequest, CropRecommendationResponse, IrrigationGuideResponse
 from auth.utils import get_current_user
-from rules_engine.crop_rules import get_crop_recommendation, get_irrigation_guidance
+from rules_engine.crop_rules import (
+    get_crop_recommendation,
+    get_irrigation_guidance,
+    get_fertilizer_guidance,
+    get_pest_disease_alerts,
+    get_crop_metadata,
+)
 
 router = APIRouter(prefix="/api/irrigation", tags=["irrigation"])
 
@@ -31,13 +37,16 @@ async def recommend_crops(
     # --- 2. Get crop recommendation from Rules Engine ---
     # Use soil type from the request if the farmer picked one on this
     # screen, otherwise fall back to the plot's saved soil type. Season and
-    # water availability come only from the request (the plot has no such
-    # fields), so recommendations change whenever the farmer changes them.
+    # water availability come only from the request. Pass plot area / GPS
+    # for regional adaptation of the reasoning text.
     soil_type = body.soil_type or plot.soil_type
     crops, reasoning = get_crop_recommendation(
         soil_type,
         season=body.season,
         water_availability=body.water_availability,
+        area_hectares=plot.area_hectares,
+        latitude=plot.latitude,
+        longitude=plot.longitude,
     )
     recommended_crops_str = ", ".join(crops)
 
@@ -50,9 +59,12 @@ async def recommend_crops(
     db.add(crop_rec)
     await db.flush()  # get crop_rec.id before creating irrigation
 
-    # --- 4. Generate irrigation guidance for top recommended crop ---
+    # --- 4. Generate guidance for top recommended crop ---
     top_crop = crops[0] if crops else "vegetables"
     irrigation_data = get_irrigation_guidance(top_crop, water_availability=body.water_availability)
+    fertilizer_advice = get_fertilizer_guidance(top_crop)
+    pest_alerts = get_pest_disease_alerts(top_crop)
+    crop_meta = get_crop_metadata(top_crop)
 
     irrigation = IrrigationGuidance(
         crop_recommendation_id=crop_rec.id,
@@ -61,6 +73,16 @@ async def recommend_crops(
         method=irrigation_data.get("method"),
     )
     db.add(irrigation)
+
+    # Build a rich, farmer-friendly recommendation summary.
+    enriched_reasoning_parts = [reasoning]
+    enriched_reasoning_parts.append(
+        f" Top pick '{top_crop.title()}': fertilize with {fertilizer_advice}"
+    )
+    enriched_reasoning_parts.append(f" Watch for: {pest_alerts}")
+    if irrigation_data.get("note"):
+        enriched_reasoning_parts.append(irrigation_data["note"])
+    crop_rec.reasoning = " ".join(enriched_reasoning_parts)
 
     # --- 5. Log to ANALYSIS_HISTORY ---
     history_entry = AnalysisHistory(
@@ -75,6 +97,9 @@ async def recommend_crops(
             "water_availability": body.water_availability,
             "top_crop_for_irrigation": top_crop,
             "irrigation": irrigation_data,
+            "fertilizer": fertilizer_advice,
+            "pest_alerts": pest_alerts,
+            "crop_metadata": crop_meta,
         },
     )
     db.add(history_entry)

@@ -68,19 +68,12 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
     treatment: List[str] = Field(description="Treatment steps including product+dosage")
     image_quality: _ImageQualitySchema = Field(description="Assessment of whether the image is usable for diagnosis")
 
+# Valid Gemini model names (verified). Keep the list short so diagnosis is fast;
+# each model gets its own timeout attempt.
 models_to_try = [
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash-lite",
-    "gemini-flash-latest",
-    "gemini-pro-latest",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-lite",
 ]
 
 
@@ -195,7 +188,7 @@ class GeminiService:
             temperature=0.2,
             top_p=0.85,
             top_k=30,
-            max_output_tokens=1500,
+            max_output_tokens=900,  # JSON-only responses need far fewer tokens
         )
 
     @staticmethod
@@ -211,7 +204,7 @@ class GeminiService:
             temperature=0.2,
             top_p=0.85,
             top_k=30,
-            max_output_tokens=1500,
+            max_output_tokens=900,  # JSON-only responses need far fewer tokens
             response_mime_type="application/json",
             response_schema=response_schema.model_json_schema(),
         )
@@ -221,7 +214,7 @@ class GeminiService:
         contents: Union[str, List[Any]],
         config: Optional[Any] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 15.0,
+        timeout: float = 12.0,
         validate_json: bool = False,
     ) -> Tuple[str, str]:
         """
@@ -291,7 +284,7 @@ class GeminiService:
         self,
         message: str,
         models_list: Optional[List[str]] = None,
-        timeout: float = 15.0,
+        timeout: float = 12.0,
     ) -> str:
         """Asynchronously generates a text response with fallback support."""
         text, _ = await self.generate_content_with_fallback(
@@ -308,7 +301,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 15.0,
+        timeout: float = 12.0,
         crop_name: Optional[str] = None,
     ) -> Union[Tuple[Dict[str, Any], str, str], DiseaseFallbackResponse]:
         """
@@ -419,7 +412,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 15.0,
+        timeout: float = 12.0,
         crop_name: Optional[str] = None,
     ) -> Union[Tuple[Dict[str, Any], str, str], PestFallbackResponse]:
         """
@@ -529,7 +522,7 @@ class GeminiService:
         language: str = "english",
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
-        timeout: float = 15.0,
+        timeout: float = 12.0,
     ) -> Union[Tuple[Dict[str, Any], str, str], PlantDiagnosisFallbackResponse]:
         """
         Diagnoses a houseplant / ornamental plant image in the requested language.
