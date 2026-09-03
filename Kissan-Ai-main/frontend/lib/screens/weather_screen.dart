@@ -18,7 +18,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
 
   Future<void> _useMyLocation() async {
     setState(() => _locating = true);
-    await ref.read(weatherProvider.notifier).refresh();
+    await ref.read(weatherProvider.notifier).refreshLocation();
     if (mounted) setState(() => _locating = false);
   }
 

@@ -149,75 +149,93 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      // Resolve location via LocationService (GPS -> geocoded city -> default).
-      final resolved = await LocationService.instance.resolveLocation();
-      _usingDefaultLocation = resolved.isDefault;
-
-      final double lat = resolved.lat;
-      final double lon = resolved.lon;
-
-      // Call backend forecast endpoint (includes current + 3-day + alerts)
-      final response = await _dio.get(
-        '/api/weather/forecast',
-        queryParameters: {
-          'lat': lat,
-          'lon': lon,
-        },
-      );
-
-      final data = response.data;
-
-      // Parse current weather from forecast response
-      final current = data['current'] ?? data;
-      final temperature = (current['temperature'] as num?)?.round() ?? 32;
-      final humidity = (current['humidity'] as num?)?.round() ?? 65;
-      final rainProb = (current['rain_probability'] as num?)?.round() ?? 20;
-      final windSpeed = (current['wind_speed'] as num?)?.round() ?? 8;
-      final description = current['description'] as String? ?? 'Clear';
-      final location = current['location'] as String? ?? resolved.label;
-
-      // Parse 3-day forecast
-      final dailyList = (data['daily'] as List?) ?? [];
-      final dailyForecasts = dailyList.map<DailyForecast>((d) {
-        return DailyForecast(
-          day: d['day']?.toString() ?? '',
-          high: (d['high'] as num?)?.round() ?? 30,
-          low: (d['low'] as num?)?.round() ?? 20,
-          condition: d['condition']?.toString() ?? 'Clear',
-          conditionIcon: _conditionToIcon(d['condition_icon']?.toString() ?? 'clear'),
-          rainChance: (d['rain_chance'] as num?)?.round() ?? 0,
-          humidity: (d['humidity'] as num?)?.round() ?? 65,
-          windSpeed: (d['wind_speed'] as num?)?.round() ?? 0,
-        );
-      }).toList();
-
-      // Parse alerts
-      final alertList = (data['alerts'] as List?)?.cast<String>() ?? [];
-
-      state = WeatherState(
-        temperatureC: temperature,
-        feelsLike: temperature + 3,
-        rainProbability: rainProb,
-        windSpeedKmh: windSpeed,
-        humidity: humidity,
-        uvIndex: 6,
-        visibility: 10,
-        pressure: 1013,
-        dewPoint: (temperature - 10).clamp(-10, 40),
-        location: location,
-        condition: _mapCondition(description),
-        conditionIcon: _conditionToIcon(description),
-        loading: false,
-        hourlyForecast: const <HourlyForecast>[],
-        dailyForecast: dailyForecasts,
-        alerts: alertList,
-      );
+      await _fetchWeather();
     } catch (e) {
       state = state.copyWith(
         loading: false,
         error: AppError.fromException(e),
       );
     }
+  }
+
+  /// Resolve GPS location and fetch weather WITHOUT showing a loading spinner.
+  /// Used by the location button so only the location changes — the rest of
+  /// the UI stays responsive.
+  Future<void> refreshLocation() async {
+    try {
+      await _fetchWeather();
+    } catch (e) {
+      state = state.copyWith(
+        error: AppError.fromException(e),
+      );
+    }
+  }
+
+  /// Internal: resolve location + fetch forecast.  Does NOT toggle loading.
+  Future<void> _fetchWeather() async {
+    // Resolve location via LocationService (GPS -> geocoded city -> default).
+    final resolved = await LocationService.instance.resolveLocation();
+    _usingDefaultLocation = resolved.isDefault;
+
+    final double lat = resolved.lat;
+    final double lon = resolved.lon;
+
+    // Call backend forecast endpoint (includes current + 3-day + alerts)
+    final response = await _dio.get(
+      '/api/weather/forecast',
+      queryParameters: {
+        'lat': lat,
+        'lon': lon,
+      },
+    );
+
+    final data = response.data;
+
+    // Parse current weather from forecast response
+    final current = data['current'] ?? data;
+    final temperature = (current['temperature'] as num?)?.round() ?? 32;
+    final humidity = (current['humidity'] as num?)?.round() ?? 65;
+    final rainProb = (current['rain_probability'] as num?)?.round() ?? 20;
+    final windSpeed = (current['wind_speed'] as num?)?.round() ?? 8;
+    final description = current['description'] as String? ?? 'Clear';
+    final location = current['location'] as String? ?? resolved.label;
+
+    // Parse 3-day forecast
+    final dailyList = (data['daily'] as List?) ?? [];
+    final dailyForecasts = dailyList.map<DailyForecast>((d) {
+      return DailyForecast(
+        day: d['day']?.toString() ?? '',
+        high: (d['high'] as num?)?.round() ?? 30,
+        low: (d['low'] as num?)?.round() ?? 20,
+        condition: d['condition']?.toString() ?? 'Clear',
+        conditionIcon: _conditionToIcon(d['condition_icon']?.toString() ?? 'clear'),
+        rainChance: (d['rain_chance'] as num?)?.round() ?? 0,
+        humidity: (d['humidity'] as num?)?.round() ?? 65,
+        windSpeed: (d['wind_speed'] as num?)?.round() ?? 0,
+      );
+    }).toList();
+
+    // Parse alerts
+    final alertList = (data['alerts'] as List?)?.cast<String>() ?? [];
+
+    state = WeatherState(
+      temperatureC: temperature,
+      feelsLike: temperature + 3,
+      rainProbability: rainProb,
+      windSpeedKmh: windSpeed,
+      humidity: humidity,
+      uvIndex: 6,
+      visibility: 10,
+      pressure: 1013,
+      dewPoint: (temperature - 10).clamp(-10, 40),
+      location: location,
+      condition: _mapCondition(description),
+      conditionIcon: _conditionToIcon(description),
+      loading: false,
+      hourlyForecast: const <HourlyForecast>[],
+      dailyForecast: dailyForecasts,
+      alerts: alertList,
+    );
   }
 
   /// Whether the provider fell back to the hardcoded default location.
