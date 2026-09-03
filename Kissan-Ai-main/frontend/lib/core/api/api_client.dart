@@ -64,6 +64,24 @@ class ApiClient {
 
   Future<Response> getProfile() => _dio.get('/api/auth/profile');
 
+  Future<Response> updateProfile({
+    String? fullName,
+    String? phone,
+    String? preferredLanguage,
+  }) =>
+      _dio.put('/api/auth/profile', data: {
+        if (fullName != null) 'full_name': fullName,
+        if (phone != null) 'phone': phone,
+        if (preferredLanguage != null) 'preferred_language': preferredLanguage,
+      });
+
+  Future<Response> uploadProfileImage(String filePath) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath),
+    });
+    return _dio.post('/api/auth/profile/image', data: formData);
+  }
+
   Future<Response> refreshToken(String refreshToken) =>
       _dio.post('/api/auth/refresh', data: {'refresh_token': refreshToken});
 

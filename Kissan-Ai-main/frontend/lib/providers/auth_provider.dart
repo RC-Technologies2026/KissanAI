@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/dio_client.dart';
 import '../core/storage/local_storage.dart';
@@ -13,6 +14,8 @@ class AuthState {
     this.userId,
     this.userName,
     this.userEmail,
+    this.userPhone,
+    this.profileImageUrl,
     this.error,
   });
 
@@ -20,6 +23,8 @@ class AuthState {
   final String? userId;
   final String? userName;
   final String? userEmail;
+  final String? userPhone;
+  final String? profileImageUrl;
   final String? error;
 
   AuthState copyWith({
@@ -27,6 +32,8 @@ class AuthState {
     String? userId,
     String? userName,
     String? userEmail,
+    String? userPhone,
+    String? profileImageUrl,
     String? error,
   }) =>
       AuthState(
@@ -34,6 +41,8 @@ class AuthState {
         userId: userId ?? this.userId,
         userName: userName ?? this.userName,
         userEmail: userEmail ?? this.userEmail,
+        userPhone: userPhone ?? this.userPhone,
+        profileImageUrl: profileImageUrl ?? this.profileImageUrl,
         error: error,
       );
 }
@@ -49,14 +58,48 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _checkExistingSession() async {
     final token = await readToken();
     if (token != null && token.isNotEmpty && _storage.userId != null) {
+      // Fetch profile from backend to get latest data
+      await _fetchProfile();
+    } else {
+      state = state.copyWith(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  Future<void> _fetchProfile() async {
+    try {
+      final res = await _api.getProfile();
+      final data = res.data;
+      final userId = data['id']?.toString() ?? _storage.userId ?? '';
+      final userName = data['full_name'] as String? ?? _storage.userName;
+      final userEmail = data['email'] as String? ?? _storage.userEmail;
+      final userPhone = data['phone'] as String? ?? _storage.userPhone;
+      final profileImageUrl = data['profile_image_url'] as String?;
+
+      _storage.userId = userId;
+      _storage.userName = userName;
+      _storage.userEmail = userEmail;
+      if (userPhone != null) _storage.userPhone = userPhone;
+      if (profileImageUrl != null) _storage.profileImageUrl = profileImageUrl;
+
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        userId: userId,
+        userName: userName,
+        userEmail: userEmail,
+        userPhone: userPhone,
+        profileImageUrl: profileImageUrl,
+      );
+    } catch (e) {
+      debugPrint('Failed to fetch profile: $e');
+      // Use cached data if fetch fails
       state = state.copyWith(
         status: AuthStatus.authenticated,
         userId: _storage.userId,
         userName: _storage.userName,
         userEmail: _storage.userEmail,
+        userPhone: _storage.userPhone,
+        profileImageUrl: _storage.profileImageUrl,
       );
-    } else {
-      state = state.copyWith(status: AuthStatus.unauthenticated);
     }
   }
 
@@ -108,7 +151,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userId,
         userName: name,
         userEmail: email,
+        userPhone: phone,
       );
+
+      // Fetch full profile from backend
+      await _fetchProfile();
     } on DioException catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -153,6 +200,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userName: _storage.userName,
         userEmail: email,
       );
+
+      // Fetch full profile from backend
+      await _fetchProfile();
     } on DioException catch (e) {
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
@@ -166,11 +216,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  void updateProfile({String? name, String? email}) {
+  Future<void> updateProfile({
+    String? name,
+    String? email,
+    String? phone,
+    String? profileImageUrl,
+  }) async {
+    // Update local state immediately for responsive UI
     state = state.copyWith(
       userName: name ?? state.userName,
       userEmail: email ?? state.userEmail,
+      userPhone: phone ?? state.userPhone,
+      profileImageUrl: profileImageUrl ?? state.profileImageUrl,
     );
+
+    // Save to local storage
+    if (name != null) _storage.userName = name;
+    if (email != null) _storage.userEmail = email;
+    if (phone != null) _storage.userPhone = phone;
+    if (profileImageUrl != null) _storage.profileImageUrl = profileImageUrl;
+
+    // Sync to backend
+    try {
+      await _api.updateProfile(
+        fullName: name,
+        phone: phone,
+      );
+    } catch (e) {
+      debugPrint('Failed to update profile on backend: $e');
+    }
   }
 
   Future<void> logout() async {

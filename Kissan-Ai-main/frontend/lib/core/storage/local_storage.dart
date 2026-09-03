@@ -33,6 +33,9 @@ class LocalStorage {
   String? get userPhone => _authBox.get(HiveKeys.userPhone) as String?;
   set userPhone(String? v) => v == null ? _authBox.delete(HiveKeys.userPhone) : _authBox.put(HiveKeys.userPhone, v);
 
+  String? get profileImageUrl => _authBox.get(HiveKeys.profileImageUrl) as String?;
+  set profileImageUrl(String? v) => v == null ? _authBox.delete(HiveKeys.profileImageUrl) : _authBox.put(HiveKeys.profileImageUrl, v);
+
   // ─── Farm details ──────────────────────────────────────────
 
   String? get farmName => _authBox.get(HiveKeys.farmName) as String?;

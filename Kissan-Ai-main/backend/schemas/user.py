@@ -42,6 +42,7 @@ class UserOut(BaseModel):
     email: str
     full_name: Optional[str] = None
     phone: Optional[str] = None
+    profile_image_url: Optional[str] = None
     preferred_language: str
     is_onboarded: bool
     created_at: datetime
@@ -61,3 +62,10 @@ class RefreshRequest(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Schema for updating user profile."""
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    preferred_language: Optional[str] = None

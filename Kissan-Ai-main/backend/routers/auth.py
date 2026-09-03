@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.user import User
-from schemas.user import UserRegister, UserLogin, UserOut, Token, RefreshRequest
-from auth.utils import hash_password, verify_password, create_access_token, create_refresh_token
+from schemas.user import UserRegister, UserLogin, UserOut, Token, RefreshRequest, ProfileUpdateRequest
+from auth.utils import hash_password, verify_password, create_access_token, create_refresh_token, get_current_user
 from jose import JWTError, jwt
 from auth.utils import SECRET_KEY, ALGORITHM
 from rate_limiter import limiter
+import cloudinary.uploader as cloudinary_uploader
+import asyncio
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -107,3 +109,76 @@ async def refresh(request: Request, body: RefreshRequest):
         "refresh_token": new_refresh,
         "token_type": "bearer",
     }
+
+
+@router.get("/profile", response_model=UserOut)
+async def get_profile(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get current user's profile."""
+    return current_user
+
+
+@router.put("/profile", response_model=UserOut)
+async def update_profile(
+    request: Request,
+    body: ProfileUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update user profile (name, phone, language)."""
+    # Update fields if provided
+    if body.full_name is not None:
+        current_user.full_name = body.full_name
+    if body.phone is not None:
+        # Check if phone is already used by another user
+        if body.phone:
+            result = await db.execute(select(User).where(User.phone == body.phone, User.id != current_user.id))
+            if result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Phone number already in use")
+        current_user.phone = body.phone
+    if body.preferred_language is not None:
+        current_user.preferred_language = body.preferred_language
+    
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/profile/image", response_model=dict)
+async def upload_profile_image(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload profile image to Cloudinary."""
+    # Validate file type
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are allowed.")
+    
+    # Read file
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:  # 5MB limit
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 5MB")
+    
+    # Upload to Cloudinary
+    try:
+        result = await asyncio.to_thread(
+            cloudinary_uploader.upload,
+            contents,
+            folder="kissanai/profiles",
+            resource_type="image"
+        )
+        image_url = result.get("secure_url")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+    
+    # Update user's profile_image_url
+    current_user.profile_image_url = image_url
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return {"profile_image_url": image_url}

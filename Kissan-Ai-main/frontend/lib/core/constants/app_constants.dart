@@ -83,6 +83,7 @@ class HiveKeys {
   static const String farmLocation = 'farm_location';
   static const String farmerType = 'farmer_type';
   static const String userPhone = 'user_phone';
+  static const String profileImageUrl = 'profile_image_url';
   static const String farmLat = 'farm_lat';
   static const String farmLon = 'farm_lon';
 }

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../core/constants/app_colors.dart';
 import '../core/data/pakistan_locations.dart';
 import '../core/services/location_service.dart';
 import '../core/storage/local_storage.dart';
+import '../core/api/api_client.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_text_field.dart';
 import '../widgets/cascading_dropdown.dart';
@@ -36,6 +39,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   bool _saving = false;
   bool _locatingGps = false;
+  bool _uploadingImage = false;
+  File? _profileImageFile;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -57,6 +63,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _farmSize = storage.farmSize > 0 ? storage.farmSize : 5;
     _sizeUnit = storage.farmSizeUnit;
     _farmerType = storage.farmerType ?? 'Experienced Farmer';
+
+    // Load profile image if available
+    final profileImageUrl = ref.read(authProvider).profileImageUrl;
+    if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+      // Image will be loaded from network
+    }
   }
 
   @override
@@ -74,8 +86,27 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     setState(() => _saving = true);
 
     final storage = LocalStorage.instance;
+    final api = ApiClient.instance;
 
-    // Save personal details
+    // Upload profile image if selected
+    String? newProfileImageUrl;
+    if (_profileImageFile != null) {
+      try {
+        final response = await api.uploadProfileImage(_profileImageFile!.path);
+        newProfileImageUrl = response.data['profile_image_url'] as String?;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to upload image: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+
+    // Save personal details to local storage
     storage.userName = _nameCtrl.text.trim();
     storage.userEmail = _emailCtrl.text.trim();
     storage.userPhone = _phoneCtrl.text.trim();
@@ -93,10 +124,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     // Geocode city -> lat/lon so weather doesn't need to re-do it.
     _geocodeAndSave();
 
-    // Update Riverpod auth state
-    ref.read(authProvider.notifier).updateProfile(
+    // Update Riverpod auth state (this also syncs to backend)
+    await ref.read(authProvider.notifier).updateProfile(
           name: _nameCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim(),
+          profileImageUrl: newProfileImageUrl,
         );
 
     setState(() => _saving = false);
@@ -174,6 +207,52 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  /// Pick profile image from camera or gallery.
+  Future<void> _pickProfileImage() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () async {
+                Navigator.pop(context);
+                final image = await _imagePicker.pickImage(
+                  source: ImageSource.camera,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 85,
+                );
+                if (image != null) {
+                  setState(() => _profileImageFile = File(image.path));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () async {
+                Navigator.pop(context);
+                final image = await _imagePicker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 85,
+                );
+                if (image != null) {
+                  setState(() => _profileImageFile = File(image.path));
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provinces = PakistanLocations.provinces;
@@ -212,43 +291,71 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               Center(
                 child: Stack(
                   children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(
+                    GestureDetector(
+                      onTap: _pickProfileImage,
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
                           color: AppColors.primary,
-                          width: 3,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          (_nameCtrl.text.isNotEmpty)
-                              ? _nameCtrl.text.trim()[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 3,
                           ),
+                          image: _profileImageFile != null
+                              ? DecorationImage(
+                                  image: FileImage(_profileImageFile!),
+                                  fit: BoxFit.cover,
+                                )
+                              : (ref.read(authProvider).profileImageUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(ref.read(authProvider).profileImageUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null),
                         ),
+                        child: _profileImageFile == null && ref.read(authProvider).profileImageUrl == null
+                            ? Center(
+                                child: Text(
+                                  (_nameCtrl.text.isNotEmpty)
+                                      ? _nameCtrl.text.trim()[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              )
+                            : null,
                       ),
                     ),
                     Positioned(
                       bottom: 0,
                       right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 18,
+                      child: GestureDetector(
+                        onTap: _pickProfileImage,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: _uploadingImage
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                         ),
                       ),
                     ),
