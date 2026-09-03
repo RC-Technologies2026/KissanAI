@@ -210,12 +210,16 @@ class ApiClient {
     required String cropName,
     String? waterAvailability,
     String? growthStage,
+    String? plantingDate,
+    String? lastWatered,
   }) =>
       _dio.post('/api/irrigation/direct-guide', data: {
         'plot_id': plotId,
         'crop_name': cropName,
         if (waterAvailability != null) 'water_availability': waterAvailability,
         if (growthStage != null) 'growth_stage': growthStage,
+        if (plantingDate != null) 'planting_date': plantingDate,
+        if (lastWatered != null) 'last_watered': lastWatered,
       });
 
   // ─── Chat ────────────────────────────────────────────────

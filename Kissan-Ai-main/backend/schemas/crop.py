@@ -37,6 +37,8 @@ class DirectIrrigationGuideRequest(BaseModel):
     crop_name: str
     water_availability: Optional[str] = "Medium"
     growth_stage: Optional[str] = None
+    planting_date: Optional[str] = None
+    last_watered: Optional[str] = None
 
 
 class DirectIrrigationGuideResponse(BaseModel):
@@ -51,3 +53,5 @@ class DirectIrrigationGuideResponse(BaseModel):
     growth_stage: Optional[str] = None
     next_irrigation: Optional[str] = None
     duration_days: Optional[int] = None
+    days_since_watered: Optional[int] = None
+    crop_age_days: Optional[int] = None

@@ -22,6 +22,7 @@ from rules_engine.crop_rules import (
     get_pest_disease_alerts,
     get_crop_metadata,
 )
+from datetime import datetime, date
 
 router = APIRouter(prefix="/api/irrigation", tags=["irrigation"])
 
@@ -166,14 +167,47 @@ async def direct_irrigation_guide(
 
     crop_name = body.crop_name.strip()
 
-    # --- 2. Generate guidance from rules engine ---
+    # --- 2. Parse planting_date and last_watered ---
+    crop_age_days = None
+    days_since_watered = None
+    today = date.today()
+
+    if body.planting_date:
+        try:
+            planting = datetime.strptime(body.planting_date, "%Y-%m-%d").date()
+            crop_age_days = (today - planting).days
+            if crop_age_days < 0:
+                crop_age_days = None
+        except (ValueError, TypeError):
+            pass
+
+    if body.last_watered:
+        try:
+            watered = datetime.strptime(body.last_watered, "%Y-%m-%d").date()
+            days_since_watered = (today - watered).days
+            if days_since_watered < 0:
+                days_since_watered = None
+        except (ValueError, TypeError):
+            pass
+
+    # --- 3. Generate guidance from rules engine ---
     irrigation_data = get_irrigation_guidance(crop_name, water_availability=body.water_availability)
     fertilizer = get_fertilizer_guidance(crop_name)
     pest_alerts = get_pest_disease_alerts(crop_name)
     crop_meta = get_crop_metadata(crop_name)
 
-    # Pick a sensible growth stage if not provided.
+    # Pick a sensible growth stage based on crop age if available.
     growth_stage = body.growth_stage
+    if not growth_stage and crop_age_days is not None:
+        duration = crop_meta.get("duration_days", 120)
+        if crop_age_days < duration * 0.2:
+            growth_stage = "Seedling"
+        elif crop_age_days < duration * 0.5:
+            growth_stage = "Vegetative"
+        elif crop_age_days < duration * 0.8:
+            growth_stage = "Flowering / Reproductive"
+        else:
+            growth_stage = "Maturation"
     if not growth_stage:
         schedule_text = irrigation_data.get("schedule", "")
         if "seedling" in schedule_text.lower():
@@ -187,7 +221,42 @@ async def direct_irrigation_guide(
         else:
             growth_stage = "Active growth"
 
-    # --- 3. Log to ANALYSIS_HISTORY ---
+    # Build a personalized note based on last_watered and crop age.
+    personalized_note = irrigation_data.get("note")
+    if days_since_watered is not None:
+        schedule = irrigation_data.get("schedule", "")
+        import re
+        intervals = re.findall(r"every\s+(\d+)[-\s]*(\d*)\s*days", schedule.lower())
+        if intervals:
+            first, second = intervals[0]
+            typical_gap = int(second) if second else int(first)
+            if days_since_watered > typical_gap:
+                personalized_note = (
+                    f"It has been {days_since_watered} days since last irrigation — "
+                    f"this exceeds the typical {typical_gap}-day gap. Water immediately!"
+                )
+            elif days_since_watered >= typical_gap - 2:
+                personalized_note = (
+                    f"Last watered {days_since_watered} days ago. Next irrigation due soon — "
+                    f"check soil moisture today."
+                )
+            else:
+                personalized_note = (
+                    f"Last watered {days_since_watered} days ago. Next irrigation due in "
+                    f"{typical_gap - days_since_watered} days."
+                )
+
+    if crop_age_days is not None:
+        duration = crop_meta.get("duration_days", 0)
+        if duration > 0:
+            remaining = max(0, duration - crop_age_days)
+            if crop_age_info := f"Crop is {crop_age_days} days old ({remaining} days to maturity).":
+                if personalized_note:
+                    personalized_note += f" {crop_age_info}"
+                else:
+                    personalized_note = crop_age_info
+
+    # --- 4. Log to ANALYSIS_HISTORY ---
     history_entry = AnalysisHistory(
         user_id=current_user.id,
         analysis_type="irrigation",
@@ -201,10 +270,14 @@ async def direct_irrigation_guide(
             "schedule": irrigation_data.get("schedule"),
             "water_amount_liters": irrigation_data.get("water_amount_liters"),
             "method": irrigation_data.get("method"),
-            "note": irrigation_data.get("note"),
+            "note": personalized_note,
             "fertilizer": fertilizer,
             "pest_alerts": pest_alerts,
             "duration_days": crop_meta.get("duration_days"),
+            "planting_date": body.planting_date,
+            "last_watered": body.last_watered,
+            "crop_age_days": crop_age_days,
+            "days_since_watered": days_since_watered,
         },
     )
     db.add(history_entry)
@@ -216,10 +289,12 @@ async def direct_irrigation_guide(
         schedule=irrigation_data.get("schedule", "Irrigate as needed based on soil moisture."),
         water_amount_liters=irrigation_data.get("water_amount_liters", 0.0),
         method=irrigation_data.get("method"),
-        note=irrigation_data.get("note"),
+        note=personalized_note,
         fertilizer=fertilizer,
         pest_alerts=pest_alerts,
         growth_stage=growth_stage,
         next_irrigation=irrigation_data.get("next_irrigation", "Check soil moisture daily."),
         duration_days=crop_meta.get("duration_days"),
+        days_since_watered=days_since_watered,
+        crop_age_days=crop_age_days,
     )

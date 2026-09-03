@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../core/constants/app_colors.dart';
 import '../core/data/pakistan_locations.dart';
-import '../core/services/location_service.dart';
 import '../core/storage/local_storage.dart';
 import '../core/api/api_client.dart';
 import '../providers/auth_provider.dart';
@@ -30,15 +29,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late TextEditingController _farmLocationCtrl;
 
   // Farm details
-  String _province = 'Punjab';
-  String _district = 'Faisalabad';
-  String _city = 'Faisalabad City';
+  String _province = '';
+  String _district = '';
+  String _city = '';
   double _farmSize = 5;
   String _sizeUnit = 'Acres';
   String _farmerType = 'Experienced Farmer';
 
   bool _saving = false;
-  bool _locatingGps = false;
   bool _uploadingImage = false;
   File? _profileImageFile;
   final ImagePicker _imagePicker = ImagePicker();
@@ -57,9 +55,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     // Farm details
     _farmNameCtrl = TextEditingController(text: storage.farmName ?? '');
     _farmLocationCtrl = TextEditingController(text: storage.farmLocation ?? '');
-    _province = storage.farmProvince ?? 'Punjab';
-    _district = storage.farmDistrict ?? 'Faisalabad';
-    _city = storage.farmCity ?? 'Faisalabad City';
+    _province = storage.farmProvince ?? '';
+    _district = storage.farmDistrict ?? '';
+    _city = storage.farmCity ?? '';
     _farmSize = storage.farmSize > 0 ? storage.farmSize : 5;
     _sizeUnit = storage.farmSizeUnit;
     _farmerType = storage.farmerType ?? 'Experienced Farmer';
@@ -121,9 +119,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     storage.farmSizeUnit = _sizeUnit;
     storage.farmerType = _farmerType;
 
-    // Geocode city -> lat/lon so weather doesn't need to re-do it.
-    _geocodeAndSave();
-
     // Update Riverpod auth state (this also syncs to backend)
     await ref.read(authProvider.notifier).updateProfile(
           name: _nameCtrl.text.trim(),
@@ -142,68 +137,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ),
       );
       context.pop();
-    }
-  }
-
-  /// Geocode the selected city and persist lat/lon.
-  Future<void> _geocodeAndSave() async {
-    try {
-      final result = await LocationService.instance.geocodeCity(_city, _province);
-      if (result != null) {
-        final storage = LocalStorage.instance;
-        storage.farmLat = result.lat;
-        storage.farmLon = result.lon;
-      }
-    } catch (_) {
-      // Non-critical — weather will resolve via its own fallback chain.
-    }
-  }
-
-  /// Use GPS to auto-fill city/province.
-  Future<void> _useMyLocation() async {
-    setState(() => _locatingGps = true);
-    try {
-      final resolved = await LocationService.instance.resolveLocation();
-      if (!mounted) return;
-      if (resolved.isDefault) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not detect location. Please select manually.'),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-      } else {
-        final label = resolved.label;
-        final parts = label.split(',').map((s) => s.trim()).toList();
-        final gpsCity = parts.first;
-        final gpsProvince = parts.length > 1 ? parts[1] : _province;
-
-        final locationData = PakistanLocations.data;
-        if (locationData.containsKey(gpsProvince)) {
-          setState(() {
-            _province = gpsProvince;
-            final districts = PakistanLocations.districtsOf(gpsProvince);
-            _district = districts.isNotEmpty ? districts.first : _district;
-            final cities = PakistanLocations.citiesOf(gpsProvince, _district);
-            final matchedCity = cities.firstWhere(
-              (c) => c.toLowerCase().contains(gpsCity.toLowerCase()),
-              orElse: () => _city,
-            );
-            _city = matchedCity;
-          });
-        }
-        final storage = LocalStorage.instance;
-        storage.farmLat = resolved.lat;
-        storage.farmLon = resolved.lon;
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Location error: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _locatingGps = false);
     }
   }
 
@@ -413,50 +346,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               const SizedBox(height: 28),
 
               // ── Farm Details ─────────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Farm Details',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.headingText,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _locatingGps ? null : _useMyLocation,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: AppColors.primary, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_locatingGps)
-                            const SizedBox(
-                              width: 14, height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                            )
-                          else
-                            const Icon(Icons.my_location, size: 16, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Use my location',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              const Text(
+                'Farm Details',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.headingText,
+                ),
               ),
               const SizedBox(height: 16),
 

@@ -22,13 +22,17 @@ class ProfileScreen extends ConsumerWidget {
     final phone = storage.userPhone ?? '—';
     final firstName = name.split(' ').first;
     final farmName = storage.farmName ?? '—';
-    final farmCity = storage.farmCity ?? '—';
-    final farmProvince = storage.farmProvince ?? '—';
+    final farmCity = storage.farmCity ?? '';
+    final farmProvince = storage.farmProvince ?? '';
     final farmSize = storage.farmSize > 0
         ? '${storage.farmSize.toStringAsFixed(1)} ${storage.farmSizeUnit}'
         : '—';
     final farmerType = storage.farmerType ?? lang.t('farm.new_farmer');
     final farmLocation = storage.farmLocation ?? '—';
+    final profileImageUrl = authState.profileImageUrl;
+    final locationDisplay = (farmCity.isNotEmpty && farmProvince.isNotEmpty)
+        ? '$farmCity, $farmProvince'
+        : (farmProvince.isNotEmpty ? farmProvince : '—');
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -80,19 +84,27 @@ class ProfileScreen extends ConsumerWidget {
                       border: Border.all(
                           color: Colors.white.withValues(alpha: 0.4),
                           width: 2),
+                      image: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                          ? DecorationImage(
+                              image: NetworkImage(profileImageUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: Center(
-                      child: Text(
-                        firstName.isNotEmpty
-                            ? firstName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
+                    child: (profileImageUrl == null || profileImageUrl.isEmpty)
+                        ? Center(
+                            child: Text(
+                              firstName.isNotEmpty
+                                  ? firstName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -105,7 +117,7 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$farmCity, $farmProvince',
+                    locationDisplay,
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.white70,
@@ -181,7 +193,7 @@ class ProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _infoRow(Icons.agriculture, lang.t('profile.farm_name'), farmName),
                   const Divider(height: 24),
-                  _infoRow(Icons.location_on, lang.t('profile.location'), '$farmCity, $farmProvince'),
+                  _infoRow(Icons.location_on, lang.t('profile.location'), locationDisplay),
                   const Divider(height: 24),
                   _infoRow(Icons.map, lang.t('profile.farm_location'), farmLocation),
                   const Divider(height: 24),

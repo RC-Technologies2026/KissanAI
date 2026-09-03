@@ -62,26 +62,7 @@ class DashboardScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(right: 16),
             child: GestureDetector(
               onTap: () => _openQuickMenu(context, ref),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    firstName.isNotEmpty
-                        ? firstName[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
+              child: _buildAvatar(authState, firstName),
             ),
           ),
         ],
@@ -213,6 +194,43 @@ class DashboardScreen extends ConsumerWidget {
       builder: (_) => _QuickMenuSheet(lang: lang),
     );
   }
+
+  /// Build avatar widget: shows profile image if available, otherwise initial letter.
+  static Widget _buildAvatar(AuthState authState, String firstName) {
+    final imageUrl = authState.profileImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.primary, width: 2),
+          image: DecorationImage(
+            image: NetworkImage(imageUrl),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: const BoxDecoration(
+        color: AppColors.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          firstName.isNotEmpty ? firstName[0].toUpperCase() : '?',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Full navigation drawer with every app feature.
@@ -227,7 +245,12 @@ class _AppDrawer extends ConsumerWidget {
     final firstName = name.split(' ').first;
     final currentRoute = GoRouterState.of(context).matchedLocation;
     final storage = LocalStorage.instance;
-    final location = '${storage.farmCity ?? 'Faisalabad'}, ${storage.farmProvince ?? 'Punjab'}';
+    final city = storage.farmCity;
+    final province = storage.farmProvince;
+    final location = (city != null && city.isNotEmpty && province != null && province.isNotEmpty)
+        ? '$city, $province'
+        : (province != null && province.isNotEmpty ? province : 'Location not set');
+    final imageUrl = authState.profileImageUrl;
 
     return Drawer(
       backgroundColor: AppColors.surface,
@@ -246,22 +269,30 @@ class _AppDrawer extends ConsumerWidget {
                   Container(
                     width: 64,
                     height: 64,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.primary,
                       shape: BoxShape.circle,
+                      image: (imageUrl != null && imageUrl.isNotEmpty)
+                          ? DecorationImage(
+                              image: NetworkImage(imageUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: Center(
-                      child: Text(
-                        firstName.isNotEmpty
-                            ? firstName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    child: (imageUrl == null || imageUrl.isEmpty)
+                        ? Center(
+                            child: Text(
+                              firstName.isNotEmpty
+                                  ? firstName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 16),
                   Expanded(

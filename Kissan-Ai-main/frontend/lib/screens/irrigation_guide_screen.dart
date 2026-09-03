@@ -25,6 +25,8 @@ class _IrrigationGuideScreenState
   String _selectedPlotId = '';
   String _selectedCrop = 'Wheat';
   String _waterAvailability = 'Medium';
+  DateTime? _plantingDate;
+  DateTime? _lastWatered;
   bool _loading = false;
   String? _error;
   Map<String, dynamic>? _result;
@@ -81,6 +83,8 @@ class _IrrigationGuideScreenState
         plotId: _selectedPlotId,
         cropName: _selectedCrop,
         waterAvailability: _waterAvailability,
+        plantingDate: _plantingDate?.toIso8601String().split('T').first,
+        lastWatered: _lastWatered?.toIso8601String().split('T').first,
       );
 
       if (mounted) {
@@ -173,6 +177,20 @@ class _IrrigationGuideScreenState
           _buildPlotDropdown(plots),
           const SizedBox(height: 16),
           _buildCropDropdown(),
+          const SizedBox(height: 16),
+          _buildDatePicker(
+            label: 'Planting Date (optional)',
+            icon: Icons.calendar_month,
+            selectedDate: _plantingDate,
+            onPicked: (date) => setState(() => _plantingDate = date),
+          ),
+          const SizedBox(height: 16),
+          _buildDatePicker(
+            label: 'Last Watered (optional)',
+            icon: Icons.water_drop_outlined,
+            selectedDate: _lastWatered,
+            onPicked: (date) => setState(() => _lastWatered = date),
+          ),
           const SizedBox(height: 16),
           const Text('Water Availability',
               style: TextStyle(
@@ -324,6 +342,84 @@ class _IrrigationGuideScreenState
     );
   }
 
+  Widget _buildDatePicker({
+    required String label,
+    required IconData icon,
+    required DateTime? selectedDate,
+    required ValueChanged<DateTime> onPicked,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.headingText)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: selectedDate ?? DateTime.now(),
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: AppColors.primary,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedDate != null
+                        ? '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'
+                        : 'Tap to select date',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: selectedDate != null
+                          ? AppColors.headingText
+                          : AppColors.bodyText,
+                    ),
+                  ),
+                ),
+                if (selectedDate != null)
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      if (label.contains('Planting')) {
+                        _plantingDate = null;
+                      } else {
+                        _lastWatered = null;
+                      }
+                    }),
+                    child: const Icon(Icons.close, size: 18, color: AppColors.bodyText),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResultCard() {
     final data = _result!;
     final crop = data['crop_name']?.toString() ?? _selectedCrop;
@@ -335,6 +431,8 @@ class _IrrigationGuideScreenState
     final note = data['note']?.toString();
     final fertilizer = data['fertilizer']?.toString();
     final pests = data['pest_alerts']?.toString();
+    final cropAgeDays = data['crop_age_days'];
+    final daysSinceWatered = data['days_since_watered'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,6 +495,10 @@ class _IrrigationGuideScreenState
                 _infoRow(Icons.settings, 'Method', method),
               if (next.isNotEmpty)
                 _infoRow(Icons.schedule, 'Next irrigation', next),
+              if (cropAgeDays != null)
+                _infoRow(Icons.timer_outlined, 'Crop age', '$cropAgeDays days'),
+              if (daysSinceWatered != null)
+                _infoRow(Icons.water_drop, 'Days since watered', '$daysSinceWatered days'),
               if (note != null && note.isNotEmpty)
                 _infoRow(Icons.warning_amber_rounded, 'Note', note,
                     warning: true),
