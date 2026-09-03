@@ -173,7 +173,7 @@ class PlantNotifier extends StateNotifier<PlantState> {
     } on DioException catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: _friendlyError(e),
+        errorMessage: AppError.fromException(e),
       );
     } catch (e) {
       state = state.copyWith(
@@ -221,7 +221,7 @@ class PlantNotifier extends StateNotifier<PlantState> {
     } on DioException catch (e) {
       state = state.copyWith(
         status: PlantStatus.failure,
-        errorMessage: _friendlyError(e),
+        errorMessage: AppError.fromException(e),
       );
     } catch (e) {
       state = state.copyWith(
@@ -234,10 +234,6 @@ class PlantNotifier extends StateNotifier<PlantState> {
   void reset() => state = const PlantState();
 
   // ── Helpers ──────────────────────────────────────────────
-
-  String _friendlyError(DioException e) {
-    return AppError.fromException(e);
-  }
 
   PlantDiagnosisData _parseDiagnosis(String plantId, Map data) {
     final sections = _parseMarkdown(data['diagnosis']?.toString() ?? '');

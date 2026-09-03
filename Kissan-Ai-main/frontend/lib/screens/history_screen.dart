@@ -153,11 +153,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         e.type == DioExceptionType.sendTimeout;
   }
 
-  /// Maps a DioException to a user-friendly error string.
-  String _resolveDioError(DioException e) {
-    return AppError.fromException(e);
-  }
-
   String _formatDate(String iso) {
     if (iso.isEmpty) return '';
     try {
