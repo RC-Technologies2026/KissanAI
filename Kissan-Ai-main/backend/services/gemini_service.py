@@ -71,9 +71,19 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
 # Valid Gemini model names (verified as of Sep 2026).
 # Older models (gemini-2.0-flash, gemini-1.5-flash, gemini-2.0-flash-lite)
 # are deprecated and return 404 NOT_FOUND.
+#
+# Order matters: the FIRST model that works is used.  gemini-2.5-flash is the
+# fastest confirmed-working model, so it goes first.  Newer models are kept
+# as future fallbacks but must NOT delay the fast path.
 models_to_try = [
+    "gemini-2.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
+]
+
+# Chat-only model list — use the absolute fastest model for text Q&A.
+# Chat responses should feel instant (< 5 s), so we skip heavier models.
+chat_models_to_try = [
     "gemini-2.5-flash",
 ]
 
@@ -289,6 +299,11 @@ class GeminiService:
         timeout: float = 30.0,
     ) -> str:
         """Asynchronously generates a text response with fallback support."""
+        # For chat (no explicit models_list), use the fast chat-optimized list
+        # with a shorter timeout so responses feel instant.
+        if models_list is None:
+            models_list = chat_models_to_try
+            timeout = min(timeout, 15.0)
         text, _ = await self.generate_content_with_fallback(
             contents=message,
             models_list=models_list,

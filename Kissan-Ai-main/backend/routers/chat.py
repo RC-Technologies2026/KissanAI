@@ -26,7 +26,8 @@ async def chat(
     # --- 1. Call Gemini API with a focused agricultural prompt ---
     try:
         prompt = CHAT_USER_PROMPT_TEMPLATE.format(message=body.message)
-        ai_response = await gemini_service.generate_response(prompt)
+        # Chat uses a short timeout (10s) — farmers expect instant answers.
+        ai_response = await gemini_service.generate_response(prompt, timeout=10.0)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
