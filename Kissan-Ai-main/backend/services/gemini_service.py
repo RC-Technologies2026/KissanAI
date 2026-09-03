@@ -87,6 +87,14 @@ chat_models_to_try = [
     "gemini-2.5-flash",
 ]
 
+# Vision / structured-output model list — image analysis (disease, pest,
+# crop ID) needs heavier models that handle JSON schemas well.
+vision_models_to_try = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+]
+
 
 def _crop_identification_step(crop_name: Optional[str]) -> str:
     """Mandatory Step-1 crop instruction, adapted to whether the caller
@@ -192,7 +200,7 @@ class GeminiService:
         # Priority: explicit param > env var
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        self.default_models = models_to_try
+        self.default_models = vision_models_to_try
 
         # Low-hallucination configuration settings accessed directly via genai.types
         self.config = genai.types.GenerateContentConfig(
