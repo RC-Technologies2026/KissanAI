@@ -6,6 +6,9 @@ from typing import Optional, List
 
 class CropRecommendationRequest(BaseModel):
     plot_id: UUID
+    season: Optional[str] = None
+    soil_type: Optional[str] = None
+    water_availability: Optional[str] = None
 
 
 class CropRecommendationResponse(BaseModel):

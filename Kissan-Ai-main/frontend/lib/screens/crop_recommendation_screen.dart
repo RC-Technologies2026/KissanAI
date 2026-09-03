@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
+import '../providers/language_provider.dart';
+import '../providers/plot_provider.dart';
+import '../router/app_router.dart';
 
 /// Crop Recommendation screen — connected to backend /api/irrigation/recommend.
 class CropRecommendationScreen extends ConsumerStatefulWidget {
@@ -21,12 +24,29 @@ class _CropRecommendationScreenState
   bool _loading = false;
   String? _error;
   List<Map<String, dynamic>> _results = [];
+  String? _selectedPlotId;
 
   final _seasons = ['Rabi (Winter)', 'Kharif (Summer)'];
   final _soilTypes = ['Alluvial', 'Clay', 'Sandy', 'Loamy', 'Black', 'Red'];
   final _waterLevels = ['Low', 'Medium', 'High'];
 
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      final plotState = ref.read(plotProvider);
+      if (plotState.plots.isEmpty) {
+        ref.read(plotProvider.notifier).fetchPlots();
+      }
+    });
+  }
+
   Future<void> _getRecommendations() async {
+    if (_selectedPlotId == null) {
+      setState(() => _error = 'Please select a plot first.');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -35,32 +55,15 @@ class _CropRecommendationScreenState
 
     try {
       final api = ApiClient.instance;
-
-      // 1. Fetch user's plots
-      final plotsRes = await api.getPlots();
-      final plots = plotsRes.data as List;
-
-      String? plotId;
-      for (final p in plots) {
-        final plot = p as Map<String, dynamic>;
-        if ((plot['soil_type'] ?? '').toString().toLowerCase() ==
-            _soilType.toLowerCase()) {
-          plotId = plot['id'].toString();
-          break;
-        }
-      }
-
-      // 3. If no matching plot, create one
-      if (plotId == null) {
-        final createRes = await api.createPlot(
-          name: 'My Farm - $_soilType',
-          soilType: _soilType,
-        );
-        plotId = (createRes.data as Map<String, dynamic>)['id'].toString();
-      }
+      final plotId = _selectedPlotId!;
 
       // 4. Get crop recommendation
-      final recRes = await api.getCropRecommendation(plotId: plotId);
+      final recRes = await api.getCropRecommendation(
+        plotId: plotId,
+        season: _season,
+        soilType: _soilType,
+        waterAvailability: _waterAvailability,
+      );
       final recData = recRes.data as Map<String, dynamic>;
 
       final recommendedCrops =
@@ -73,13 +76,15 @@ class _CropRecommendationScreenState
       try {
         final irrigRes = await api.getIrrigationGuide(recId);
         final irrigData = irrigRes.data as Map<String, dynamic>;
+        final note = irrigData['note'] as String?;
         irrigationInfo =
-            'Schedule: ${irrigData['schedule']}\nMethod: ${irrigData['method'] ?? 'N/A'}';
+            'Schedule: ${irrigData['schedule']}\nMethod: ${irrigData['method'] ?? 'N/A'}'
+            '${note != null ? '\n⚠ $note' : ''}';
       } catch (_) {
         // Irrigation guide is optional
       }
 
-      // 6. Build results list
+      // Build results list
       final cropEmojis = {
         'wheat': '',
         'rice': '🌾',
@@ -106,7 +111,9 @@ class _CropRecommendationScreenState
           'crop': crop[0].toUpperCase() + crop.substring(1),
           'emoji': cropEmojis[crop.toLowerCase()] ?? '🌱',
           'score': '${scores[i]} match',
-          'reason': i == 0 ? reasoning : 'Suitable for $_soilType soil',
+          'reason': i == 0
+              ? reasoning
+              : 'Suitable for $_soilType soil in $_season with $_waterAvailability water availability',
           'irrigation': irrigationInfo ?? 'See irrigation guide for details',
         });
       }
@@ -169,6 +176,9 @@ class _CropRecommendationScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Plot selector dropdown
+                  _buildPlotDropdown(),
+                  const SizedBox(height: 16),
                   _dropdownField('Season', _season, _seasons, (v) {
                     if (v != null) setState(() => _season = v);
                   }),
@@ -353,6 +363,52 @@ class _CropRecommendationScreenState
     );
   }
 
+  Widget _buildPlotDropdown() {
+    final lang = ref.watch(languageProvider);
+    final plotState = ref.watch(plotProvider);
+    final plots = plotState.plots;
+
+    if (plots.isEmpty && !plotState.isLoading) {
+      return _NoPlotsCard(lang: lang);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(lang.t('plots.select_plot'),
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.headingText)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedPlotId,
+              hint: Text(lang.t('plots.select_plot'),
+                  style: const TextStyle(color: AppColors.bodyText)),
+              items: plots.map((p) {
+                final id = p['id'].toString();
+                final name = p['name'] ?? 'Plot';
+                return DropdownMenuItem(value: id, child: Text(name));
+              }).toList(),
+              onChanged: (v) => setState(() => _selectedPlotId = v),
+              icon: const Icon(Icons.keyboard_arrow_down,
+                  color: AppColors.bodyText),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _dropdownField(
     String label,
     String value,
@@ -389,6 +445,46 @@ class _CropRecommendationScreenState
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Shown when the farmer has no plots — directs them to My Plots screen.
+class _NoPlotsCard extends StatelessWidget {
+  const _NoPlotsCard({required this.lang});
+  final dynamic lang;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.landscape_rounded,
+              size: 40, color: AppColors.primary),
+          const SizedBox(height: 8),
+          Text(
+            lang.t('plots.no_plots'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.headingText,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () => context.push(Routes.plots),
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(lang.t('plots.add_first')),
+          ),
+        ],
+      ),
     );
   }
 }

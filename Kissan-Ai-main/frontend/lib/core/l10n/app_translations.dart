@@ -1,4 +1,4 @@
-/// App translations — Urdu, English, Punjabi, Sindhi, Pashto, Balochi.
+﻿/// App translations — Urdu, English, Punjabi, Sindhi, Pashto, Balochi.
 /// Keys are dot-separated paths for nested access.
 class AppTranslations {
   AppTranslations._();
@@ -75,6 +75,7 @@ class AppTranslations {
     'dashboard.irrigation_guide': 'Irrigation\nGuide',
     'dashboard.ask_kisan': 'Ask\nKisan AI',
     'dashboard.view_history': 'View\nHistory',
+    'dashboard.my_plots': 'My\nPlots',
 
     // Drawer
     'drawer.dashboard': 'Dashboard',
@@ -90,6 +91,7 @@ class AppTranslations {
     'drawer.profile': 'Profile',
     'drawer.settings': 'Settings',
     'drawer.logout': 'Logout',
+    'drawer.plots': 'My Plots',
 
     // Weather
     'weather.title': 'Weather',
@@ -179,6 +181,49 @@ class AppTranslations {
     'irrigation.amount': 'Water Amount',
     'irrigation.method': 'Method',
     'irrigation.tips': 'Tips',
+
+    // Plots
+    'plots.title': 'My Plots',
+    'plots.empty': 'No plots yet',
+    'plots.empty_hint': 'Add your farm plots to get personalized recommendations.',
+    'plots.add_plot': 'Add Plot',
+    'plots.edit_plot': 'Edit Plot',
+    'plots.delete_plot': 'Delete Plot',
+    'plots.delete_confirm': 'Are you sure you want to delete this plot?',
+    'plots.name': 'Plot Name',
+    'plots.name_hint': 'e.g., North Field',
+    'plots.location': 'Location',
+    'plots.location_hint': 'e.g., Faisalabad, Punjab',
+    'plots.area': 'Area (hectares)',
+    'plots.area_hint': 'e.g., 2.5',
+    'plots.soil_type': 'Soil Type',
+    'plots.gps_coords': 'GPS Coordinates (optional)',
+    'plots.latitude': 'Latitude',
+    'plots.longitude': 'Longitude',
+    'plots.select_plot': 'Select Plot',
+    'plots.no_plots': 'No plots available',
+    'plots.add_first': 'Add your first plot',
+    'plots.created': 'Plot created',
+    'plots.updated': 'Plot updated',
+    'plots.deleted': 'Plot deleted',
+
+    // Plants (houseplants / ornamental plants - NOT crops)
+    'plants.title': 'My Plants',
+    'plants.empty': 'No plants yet',
+    'plants.empty_hint': 'Add your houseplants, garden plants, or saplings to track their health.',
+    'plants.add_plant': 'Add Plant',
+    'plants.name': 'Plant Name',
+    'plants.name_hint': 'e.g., Rose, Tulsi, Money Plant',
+    'plants.species': 'Species (optional)',
+    'plants.species_hint': 'e.g., Hibiscus, Basil',
+    'plants.notes': 'Notes (optional)',
+    'plants.notes_hint': 'e.g., Kept in the living room, water twice a week',
+    'plants.diagnose': 'Diagnose Plant',
+    'plants.diagnosing': 'Analyzing...',
+    'plants.diagnose_hint': 'Take a clear photo of your plant to get an AI diagnosis for any issues.',
+    'plants.diagnosis_result': 'Plant Diagnosis',
+    'dashboard.my_plants': 'My\nPlants',
+    'drawer.plants': 'My Plants',
   };
 
   static const Map<String, String> _ur = {
@@ -240,6 +285,7 @@ class AppTranslations {
     'dashboard.irrigation_guide': 'آبپاشی\nرہنمائی',
     'dashboard.ask_kisan': 'کسان AI\nسے پوچھیں',
     'dashboard.view_history': 'تاریخ\nدیکھیں',
+    'dashboard.my_plots': 'میرے\nکھیت',
 
     // Drawer
     'drawer.dashboard': 'ڈیش بورڈ',
@@ -255,6 +301,7 @@ class AppTranslations {
     'drawer.profile': 'پروفائل',
     'drawer.settings': 'ترتیبات',
     'drawer.logout': 'لاگ آؤٹ',
+    'drawer.plots': 'میرے کھیت',
 
     // Weather
     'weather.title': 'موسم',
@@ -344,6 +391,49 @@ class AppTranslations {
     'irrigation.amount': 'پانی کی مقدار',
     'irrigation.method': 'طریقہ',
     'irrigation.tips': 'تجاویز',
+
+    // Plots
+    'plots.title': 'میرے کھیت',
+    'plots.empty': 'ابھی تک کوئی کھیت نہیں',
+    'plots.empty_hint': 'ذاتی سفارشات کے لیے اپنے کھیت شامل کریں۔',
+    'plots.add_plot': 'کھیت شامل کریں',
+    'plots.edit_plot': 'کھیت میں ترمیم',
+    'plots.delete_plot': 'کھیت حذف کریں',
+    'plots.delete_confirm': 'کیا آپ واقعی یہ کھیت حذف کرنا چاہتے ہیں؟',
+    'plots.name': 'کھیت کا نام',
+    'plots.name_hint': 'مثلاً، شمالی کھیت',
+    'plots.location': 'مقام',
+    'plots.location_hint': 'مثلاً، فیصل آباد، پنجاب',
+    'plots.area': 'رقبہ (ہیکٹر)',
+    'plots.area_hint': 'مثلاً، 2.5',
+    'plots.soil_type': 'مٹی کی قسم',
+    'plots.gps_coords': 'GPS نقاط (اختیاری)',
+    'plots.latitude': 'عرض البلد',
+    'plots.longitude': 'طول البلد',
+    'plots.select_plot': 'کھیت منتخب کریں',
+    'plots.no_plots': 'کوئی کھیت دستیاب نہیں',
+    'plots.add_first': 'اپنا پہلا کھیت شامل کریں',
+    'plots.created': 'کھیت بن گیا',
+    'plots.updated': 'کھیت اپ ڈیٹ ہو گیا',
+    'plots.deleted': 'کھیت حذف ہو گیا',
+
+    // Plants (پودے - NOT فصلیں which is crops)
+    'plants.title': 'میرے پودے',
+    'plants.empty': 'ابھی تک کوئی پودا نہیں',
+    'plants.empty_hint': 'اپنے گھر کے پودے، باغ کے پودے، یا پودے شامل کریں اور ان کی صحت ٹریک کریں۔',
+    'plants.add_plant': 'پودا شامل کریں',
+    'plants.name': 'پودے کا نام',
+    'plants.name_hint': 'مثلاً، گلاب، تلسی، منی پلانٹ',
+    'plants.species': 'قسم (اختیاری)',
+    'plants.species_hint': 'مثلاً، گڑہل، ریحان',
+    'plants.notes': 'نوٹس (اختیاری)',
+    'plants.notes_hint': 'مثلاً، ڈرائنگ روم میں رکھا ہے، ہفتے میں دو بار پانی',
+    'plants.diagnose': 'پودے کی جانچ',
+    'plants.diagnosing': 'تجزیہ ہو رہا ہے...',
+    'plants.diagnose_hint': 'اپنے پودے کی واضح تصویر لیں تاکہ AI سے کسی بھی مسئلے کی تشخیص ہو سکے۔',
+    'plants.diagnosis_result': 'پودے کی تشخیص',
+    'dashboard.my_plants': 'میرے\nپودے',
+    'drawer.plants': 'میرے پودے',
   };
 
   static const Map<String, String> _pa = {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_constants.dart';
 import '../core/data/pakistan_locations.dart';
+import '../core/services/location_service.dart';
 import '../core/storage/local_storage.dart';
 import '../providers/auth_provider.dart';
 import '../providers/language_provider.dart';
@@ -35,6 +36,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String _city = 'Faisalabad City';
   double _farmSize = 5;
   String _sizeUnit = 'Acres';
+  bool _locatingGps = false;
 
   // Use comprehensive Pakistan location data
   final _locationData = PakistanLocations.data;
@@ -72,12 +74,80 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     storage.farmSize = _farmSize;
     storage.farmSizeUnit = _sizeUnit;
 
+    // Geocode city -> lat/lon so weather doesn't need to do it later.
+    _geocodeAndSave();
+
     await ref.read(authProvider.notifier).register(
           name: _nameCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
           password: _passCtrl.text,
         );
+  }
+
+  /// Geocode the selected city and persist lat/lon.
+  Future<void> _geocodeAndSave() async {
+    try {
+      final result = await LocationService.instance.geocodeCity(_city, _province);
+      if (result != null) {
+        final storage = LocalStorage.instance;
+        storage.farmLat = result.lat;
+        storage.farmLon = result.lon;
+      }
+    } catch (_) {
+      // Non-critical — weather will resolve via its own fallback chain.
+    }
+  }
+
+  /// Use GPS to auto-fill city/province.
+  Future<void> _useMyLocation() async {
+    setState(() => _locatingGps = true);
+    try {
+      final resolved = await LocationService.instance.resolveLocation();
+      if (!mounted) return;
+      if (resolved.isDefault) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not detect location. Please select manually.'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      } else {
+        // Try to match the GPS city to our Pakistan locations data.
+        final label = resolved.label;
+        final parts = label.split(',').map((s) => s.trim()).toList();
+        final gpsCity = parts.first;
+        final gpsProvince = parts.length > 1 ? parts[1] : _province;
+
+        // If the GPS province matches our data, try to set it.
+        if (_locationData.containsKey(gpsProvince)) {
+          setState(() {
+            _province = gpsProvince;
+            final districts = _locationData[gpsProvince]!.keys.toList();
+            _district = districts.isNotEmpty ? districts.first : _district;
+            // Try to match city
+            final cities = _locationData[gpsProvince]![_district] ?? [];
+            final matchedCity = cities.firstWhere(
+              (c) => c.toLowerCase().contains(gpsCity.toLowerCase()),
+              orElse: () => _city,
+            );
+            _city = matchedCity;
+          });
+        }
+        // Persist lat/lon regardless.
+        final storage = LocalStorage.instance;
+        storage.farmLat = resolved.lat;
+        storage.farmLon = resolved.lon;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locatingGps = false);
+    }
   }
 
   @override
@@ -205,13 +275,50 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 28),
 
                 // ── Farm Details ─────────────────────────────
-                Text(
-                  lang.t('edit_profile.farm_details'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.headingText,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      lang.t('edit_profile.farm_details'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.headingText,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _locatingGps ? null : _useMyLocation,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: AppColors.primary, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_locatingGps)
+                              const SizedBox(
+                                width: 14, height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                              )
+                            else
+                              const Icon(Icons.my_location, size: 16, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Use my location',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 

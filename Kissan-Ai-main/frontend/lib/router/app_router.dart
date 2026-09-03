@@ -26,6 +26,10 @@ import '../screens/edit_profile_screen.dart';
 import '../screens/weather_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/splash_screen.dart';
+import '../screens/plots_screen.dart';
+import '../screens/plant/plant_list_screen.dart';
+import '../screens/plant/add_plant_screen.dart';
+import '../screens/plant/plant_detail_screen.dart';
 
 /// Route path constants.
 class Routes {
@@ -77,6 +81,12 @@ class Routes {
   static const String editProfile = '/profile/edit';
   static const String weather = '/weather';
   static const String settings = '/settings';
+  static const String plots = '/plots';
+
+  // Plants (houseplants / ornamental plants)
+  static const String plants = '/plants';
+  static const String plantAdd = '/plants/add';
+  static const String plantDetail = '/plants/:id';
 }
 
 /// GoRouter instance provider.
@@ -196,7 +206,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final type =
               extra?['detectionType'] as DetectionType? ?? DetectionType.disease;
-          return AnalyzingScreen(detectionType: type);
+          final imagePath = extra?['imagePath'] as String?;
+          return AnalyzingScreen(detectionType: type, imagePath: imagePath);
         },
       ),
       GoRoute(
@@ -257,6 +268,29 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.settings,
         builder: (_, _) => const SettingsScreen(),
+      ),
+
+      // --- My Plots ---
+      GoRoute(
+        path: Routes.plots,
+        builder: (_, _) => const PlotsScreen(),
+      ),
+
+      // ─── Plants (houseplants / ornamental) ──────────────
+      GoRoute(
+        path: Routes.plants,
+        builder: (_, _) => const PlantListScreen(),
+      ),
+      GoRoute(
+        path: Routes.plantAdd,
+        builder: (_, _) => const AddPlantScreen(),
+      ),
+      GoRoute(
+        path: Routes.plantDetail,
+        builder: (_, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return PlantDetailScreen(plantId: id);
+        },
       ),
     ],
   );

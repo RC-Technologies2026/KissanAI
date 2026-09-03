@@ -26,12 +26,12 @@ Dio createDio() {
 }
 
 /// Interceptor that attaches the JWT to every outbound request and
-/// handles 401 responses by clearing stored credentials.
+/// handles 401 responses by attempting a token refresh before giving up.
 class _AuthInterceptor extends Interceptor {
   _AuthInterceptor(this._dio);
 
-  // ignore: unused_field
   final Dio _dio;
+  bool _isRefreshing = false;
 
   @override
   void onRequest(
@@ -47,13 +47,59 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    // On 401, clear the stored token so the next request prompts re-login.
     if (err.response?.statusCode == 401) {
-      await _secureStorage.delete(key: HiveKeys.token);
+      // Don't try to refresh if the 401 came from the refresh endpoint itself.
+      if (err.requestOptions.path == ApiConstants.refresh) {
+        await _clearCredentials();
+        handler.next(err);
+        return;
+      }
+
+      // Attempt token refresh (only one refresh at a time).
+      if (!_isRefreshing) {
+        _isRefreshing = true;
+        try {
+          final refreshToken =
+              await _secureStorage.read(key: HiveKeys.refreshToken);
+          if (refreshToken == null || refreshToken.isEmpty) {
+            await _clearCredentials();
+            handler.next(err);
+            return;
+          }
+
+          final res = await Dio().post(
+            '${ApiConstants.baseUrl}${ApiConstants.refresh}',
+            data: {'refresh_token': refreshToken},
+            options: Options(headers: {'Content-Type': 'application/json'}),
+          );
+
+          final newAccess = res.data['access_token'] as String;
+          final newRefresh = res.data['refresh_token'] as String;
+          await _secureStorage.write(key: HiveKeys.token, value: newAccess);
+          await _secureStorage.write(
+              key: HiveKeys.refreshToken, value: newRefresh);
+
+          // Retry the original request with the new access token.
+          final opts = err.requestOptions;
+          opts.headers['Authorization'] = 'Bearer $newAccess';
+          final retryRes = await _dio.fetch(opts);
+          _isRefreshing = false;
+          handler.resolve(retryRes);
+          return;
+        } catch (_) {
+          // Refresh failed — clear credentials and propagate the original error.
+          await _clearCredentials();
+        } finally {
+          _isRefreshing = false;
+        }
+      }
     }
-    // Let ALL errors (including connection / timeout) pass through to the
-    // caller so it can show a proper message instead of a fake "offline" one.
     handler.next(err);
+  }
+
+  Future<void> _clearCredentials() async {
+    await _secureStorage.delete(key: HiveKeys.token);
+    await _secureStorage.delete(key: HiveKeys.refreshToken);
   }
 }
 
@@ -63,4 +109,14 @@ Future<void> saveToken(String token) =>
 
 Future<String?> readToken() => _secureStorage.read(key: HiveKeys.token);
 
-Future<void> clearToken() => _secureStorage.delete(key: HiveKeys.token);
+Future<void> clearToken() async {
+  await _secureStorage.delete(key: HiveKeys.token);
+  await _secureStorage.delete(key: HiveKeys.refreshToken);
+}
+
+/// Convenience helpers to persist / read the refresh token.
+Future<void> saveRefreshToken(String token) =>
+    _secureStorage.write(key: HiveKeys.refreshToken, value: token);
+
+Future<String?> readRefreshToken() =>
+    _secureStorage.read(key: HiveKeys.refreshToken);

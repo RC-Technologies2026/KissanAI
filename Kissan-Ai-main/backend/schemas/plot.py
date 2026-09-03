@@ -15,6 +15,15 @@ class PlotCreate(BaseModel):
     longitude: Optional[float] = None
 
 
+class PlotUpdate(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    area_hectares: Optional[float] = None
+    soil_type: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
 class PlotResponse(BaseModel):
     id: UUID
     user_id: UUID

@@ -21,7 +21,7 @@ class DetectionResultData {
     this.imageId,
     required this.name,
     this.cropName,
-    required this.confidence,
+    this.confidence,
     this.detectedAt,
     this.modelVersion,
     this.sections = const [],
@@ -35,8 +35,9 @@ class DetectionResultData {
   final String name;
   final String? cropName;
 
-  /// Normalized 0.0 – 1.0 confidence_score from the API.
-  final double confidence;
+  /// Normalized 0.0 – 1.0 confidence_score from the API, or null if the
+  /// backend could not determine a reliable confidence value.
+  final double? confidence;
   final DateTime? detectedAt;
   final String? modelVersion;
 
@@ -165,12 +166,15 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
       }
     }
 
-    var confidence = double.tryParse(
-          (data['confidence_score']?.toString() ?? ''),
-        ) ??
-        0.0;
-    if (confidence > 1) confidence /= 100; // tolerate 0–100 scale
-    confidence = confidence.clamp(0.0, 1.0);
+    final rawConfidence = data['confidence_score'];
+    double? confidence;
+    if (rawConfidence != null) {
+      confidence = double.tryParse(rawConfidence.toString());
+      if (confidence != null) {
+        if (confidence > 1) confidence /= 100; // tolerate 0–100 scale
+        confidence = confidence.clamp(0.0, 1.0);
+      }
+    }
 
     return DetectionResultData(
       type: type,

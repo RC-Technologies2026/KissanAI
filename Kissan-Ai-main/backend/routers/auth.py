@@ -4,8 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.user import User
-from schemas.user import UserRegister, UserLogin, UserOut, Token
-from auth.utils import hash_password, verify_password, create_access_token
+from schemas.user import UserRegister, UserLogin, UserOut, Token, RefreshRequest
+from auth.utils import hash_password, verify_password, create_access_token, create_refresh_token
+from jose import JWTError, jwt
+from auth.utils import SECRET_KEY, ALGORITHM
 from rate_limiter import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -47,7 +49,12 @@ async def login(request: Request, credentials: UserLogin, db: AsyncSession = Dep
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/token", response_model=Token)
@@ -67,4 +74,36 @@ async def token(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh(request: Request, body: RefreshRequest):
+    """Exchange a valid refresh token for a new access + refresh token pair."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if user_id is None or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # Issue new pair (rotation)
+    new_access = create_access_token(data={"sub": user_id})
+    new_refresh = create_refresh_token(data={"sub": user_id})
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+    }

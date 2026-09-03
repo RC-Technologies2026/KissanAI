@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants/app_colors.dart';
 import '../core/data/pakistan_locations.dart';
+import '../core/services/location_service.dart';
 import '../core/storage/local_storage.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_text_field.dart';
@@ -34,6 +35,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   String _farmerType = 'Experienced Farmer';
 
   bool _saving = false;
+  bool _locatingGps = false;
 
   @override
   void initState() {
@@ -88,6 +90,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     storage.farmSizeUnit = _sizeUnit;
     storage.farmerType = _farmerType;
 
+    // Geocode city -> lat/lon so weather doesn't need to re-do it.
+    _geocodeAndSave();
+
     // Update Riverpod auth state
     ref.read(authProvider.notifier).updateProfile(
           name: _nameCtrl.text.trim(),
@@ -104,6 +109,68 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ),
       );
       context.pop();
+    }
+  }
+
+  /// Geocode the selected city and persist lat/lon.
+  Future<void> _geocodeAndSave() async {
+    try {
+      final result = await LocationService.instance.geocodeCity(_city, _province);
+      if (result != null) {
+        final storage = LocalStorage.instance;
+        storage.farmLat = result.lat;
+        storage.farmLon = result.lon;
+      }
+    } catch (_) {
+      // Non-critical — weather will resolve via its own fallback chain.
+    }
+  }
+
+  /// Use GPS to auto-fill city/province.
+  Future<void> _useMyLocation() async {
+    setState(() => _locatingGps = true);
+    try {
+      final resolved = await LocationService.instance.resolveLocation();
+      if (!mounted) return;
+      if (resolved.isDefault) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not detect location. Please select manually.'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      } else {
+        final label = resolved.label;
+        final parts = label.split(',').map((s) => s.trim()).toList();
+        final gpsCity = parts.first;
+        final gpsProvince = parts.length > 1 ? parts[1] : _province;
+
+        final locationData = PakistanLocations.data;
+        if (locationData.containsKey(gpsProvince)) {
+          setState(() {
+            _province = gpsProvince;
+            final districts = PakistanLocations.districtsOf(gpsProvince);
+            _district = districts.isNotEmpty ? districts.first : _district;
+            final cities = PakistanLocations.citiesOf(gpsProvince, _district);
+            final matchedCity = cities.firstWhere(
+              (c) => c.toLowerCase().contains(gpsCity.toLowerCase()),
+              orElse: () => _city,
+            );
+            _city = matchedCity;
+          });
+        }
+        final storage = LocalStorage.instance;
+        storage.farmLat = resolved.lat;
+        storage.farmLon = resolved.lon;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locatingGps = false);
     }
   }
 
@@ -239,13 +306,50 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               const SizedBox(height: 28),
 
               // ── Farm Details ─────────────────────────────────
-              const Text(
-                'Farm Details',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.headingText,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Farm Details',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.headingText,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _locatingGps ? null : _useMyLocation,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: AppColors.primary, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_locatingGps)
+                            const SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                            )
+                          else
+                            const Icon(Icons.my_location, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Use my location',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
 

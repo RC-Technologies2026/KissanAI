@@ -18,6 +18,7 @@ from routers.insecticides import router as insecticides_router
 from routers.irrigation import router as irrigation_router
 from routers.history import router as history_router
 from routers.chat import router as chat_router
+from routers.plants import router as plants_router
 import cloudinary_config  # noqa: F401 — configures Cloudinary on import
 
 logger = logging.getLogger("kissanai")
@@ -47,16 +48,26 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- CORS — origins from environment ---
 _allowed_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+_is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+
 if _allowed_origins:
     allow_origins = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+    allow_credentials = True
 else:
-    # Development default: allow all origins
+    # No explicit origins configured — use wildcard for development only.
     allow_origins = ["*"]
+    allow_credentials = False
+    if _is_production:
+        logger.error(
+            "ALLOWED_ORIGINS is not set in production. "
+            "CORS is using wildcard '*' with credentials disabled. "
+            "Set ALLOWED_ORIGINS to your frontend domain(s)."
+        )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -72,6 +83,7 @@ app.include_router(irrigation_router)
 app.include_router(history_router)
 app.include_router(chat_router)
 app.include_router(plots_router)
+app.include_router(plants_router)
 
 @app.get("/health")
 def health_check():

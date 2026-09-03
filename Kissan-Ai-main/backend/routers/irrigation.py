@@ -29,7 +29,16 @@ async def recommend_crops(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     # --- 2. Get crop recommendation from Rules Engine ---
-    crops, reasoning = get_crop_recommendation(plot.soil_type)
+    # Use soil type from the request if the farmer picked one on this
+    # screen, otherwise fall back to the plot's saved soil type. Season and
+    # water availability come only from the request (the plot has no such
+    # fields), so recommendations change whenever the farmer changes them.
+    soil_type = body.soil_type or plot.soil_type
+    crops, reasoning = get_crop_recommendation(
+        soil_type,
+        season=body.season,
+        water_availability=body.water_availability,
+    )
     recommended_crops_str = ", ".join(crops)
 
     # --- 3. Save crop recommendation ---
@@ -43,7 +52,7 @@ async def recommend_crops(
 
     # --- 4. Generate irrigation guidance for top recommended crop ---
     top_crop = crops[0] if crops else "vegetables"
-    irrigation_data = get_irrigation_guidance(top_crop)
+    irrigation_data = get_irrigation_guidance(top_crop, water_availability=body.water_availability)
 
     irrigation = IrrigationGuidance(
         crop_recommendation_id=crop_rec.id,
@@ -61,7 +70,9 @@ async def recommend_crops(
         result_snapshot={
             "recommended_crops": crops,
             "reasoning": reasoning,
-            "soil_type": plot.soil_type,
+            "soil_type": soil_type,
+            "season": body.season,
+            "water_availability": body.water_availability,
             "top_crop_for_irrigation": top_crop,
             "irrigation": irrigation_data,
         },

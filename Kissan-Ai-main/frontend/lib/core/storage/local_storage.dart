@@ -59,6 +59,18 @@ class LocalStorage {
   String? get farmerType => _authBox.get(HiveKeys.farmerType) as String?;
   set farmerType(String? v) => v == null ? _authBox.delete(HiveKeys.farmerType) : _authBox.put(HiveKeys.farmerType, v);
 
+  double? get farmLat {
+    final v = _authBox.get(HiveKeys.farmLat);
+    return v != null ? (v as num).toDouble() : null;
+  }
+  set farmLat(double? v) => v == null ? _authBox.delete(HiveKeys.farmLat) : _authBox.put(HiveKeys.farmLat, v);
+
+  double? get farmLon {
+    final v = _authBox.get(HiveKeys.farmLon);
+    return v != null ? (v as num).toDouble() : null;
+  }
+  set farmLon(double? v) => v == null ? _authBox.delete(HiveKeys.farmLon) : _authBox.put(HiveKeys.farmLon, v);
+
   Future<void> clearAuth() => _authBox.clear();
 
   // ─── Settings box ────────────────────────────────────────

@@ -49,6 +49,11 @@ dependencies:
   # Image Picker (camera/gallery)
   image_picker: ^1.1.2
 
+  # Location & Permissions
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+  geocoding: ^3.0.0
+
   # Secure Storage (JWT)
   flutter_secure_storage: ^9.2.4
 

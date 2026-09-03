@@ -7,7 +7,7 @@ from models.image import Image
 from models.pest_detection import PestDetection
 from models.analysis_history import AnalysisHistory
 from models.user import User
-from schemas.pest import PestDetectionResponse
+from schemas.pest import PestDetectionResponse, PestFallbackResponse
 from auth.utils import get_current_user
 from cloudinary import uploader
 from utils.validation import check_magic_bytes, validate_extension, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
@@ -84,22 +84,29 @@ async def detect_pest(
     await db.refresh(image)
 
     # --- 7. Structured Multi-Model Fallback Pest Identification in Requested Language ---
-    parsed_data, formatted_markdown, model_used = await gemini_service.diagnose_pest_image(
+    result = await gemini_service.diagnose_pest_image(
         image_bytes=contents,
         mime_type=content_type,
         language=selected_language,
-        timeout=15.0,
+        timeout=45.0,
         crop_name=crop_name,
     )
+
+    # --- 7b. Handle genuinely-unusable image fallback ---
+    if isinstance(result, PestFallbackResponse):
+        # Image was too blurry / dark / no plant visible — ask farmer to retake.
+        return result
+
+    parsed_data, formatted_markdown, model_used = result
 
     # Dynamically extract pest_name and confidence_score from Gemini response
     pest_name = parsed_data.get("pest_name") or "Pest Identification"
     pest_category = parsed_data.get("pest_category")
-    confidence_val = parsed_data.get("confidence_score", 0.95)
+    confidence_val = parsed_data.get("confidence_score")
     try:
-        confidence_score = float(confidence_val)
+        confidence_score = float(confidence_val) if confidence_val is not None else None
     except (ValueError, TypeError):
-        confidence_score = 0.95
+        confidence_score = None
 
     # --- 8. Save detection record to database ---
     detection = PestDetection(

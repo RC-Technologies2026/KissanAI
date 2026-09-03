@@ -61,9 +61,11 @@ class _ResultBody extends StatelessWidget {
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
 
-  bool get _isHighConfidence => result.confidence >= 0.70;
+  bool get _isHighConfidence =>
+      result.confidence != null && result.confidence! >= 0.70;
 
-  String get _confPercent => (result.confidence * 100).round().toString();
+  String? get _confPercent =>
+      result.confidence != null ? (result.confidence! * 100).round().toString() : null;
 
   String get _detectedOn {
     final dt = result.detectedAt;
@@ -88,15 +90,20 @@ class _ResultBody extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
-              color:
-                  _isHighConfidence ? AppColors.primary : AppColors.warning,
+              color: result.confidence == null
+                  ? AppColors.bodyText
+                  : _isHighConfidence
+                      ? AppColors.primary
+                      : AppColors.warning,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
               child: Text(
-                _isHighConfidence
-                    ? '$_confPercent% Confident'
-                    : 'Low Confidence — Consult an agronomist',
+                result.confidence == null
+                    ? 'Confidence unavailable'
+                    : _isHighConfidence
+                        ? '$_confPercent% Confident'
+                        : 'Low Confidence — Consult an agronomist',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -206,8 +213,8 @@ class _ResultBody extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     result.cropName != null
-                        ? 'Closest match on ${result.cropName}: ${result.name} ($_confPercent% confident).'
-                        : 'Closest match: ${result.name} ($_confPercent% confident).',
+                        ? 'Closest match on ${result.cropName}: ${result.name}${_confPercent != null ? ' ($_confPercent% confident)' : ''}.'
+                        : 'Closest match: ${result.name}${_confPercent != null ? ' ($_confPercent% confident)' : ''}.',
                     style: const TextStyle(
                       fontSize: 15,
                       color: AppColors.headingText,

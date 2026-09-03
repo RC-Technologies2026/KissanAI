@@ -1,26 +1,36 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/detection_provider.dart';
+import '../../providers/language_provider.dart';
 import 'camera_picker_screen.dart';
 
 /// Screen 3 — Analyzing (loading).
 ///
-/// Shows a pulsing green circle with leaf icon, then auto-navigates
-/// to the result screen after a 2-second mock delay.
-class AnalyzingScreen extends StatefulWidget {
-  const AnalyzingScreen({super.key, required this.detectionType});
+/// Kicks off the real /api/disease/detect or /api/pests/detect call and
+/// shows a pulsing green circle with leaf icon while it's in flight.
+/// Navigates to the result screen only once the real API call has
+/// finished (success OR failure) — never on a fixed timer.
+class AnalyzingScreen extends ConsumerStatefulWidget {
+  const AnalyzingScreen({
+    super.key,
+    required this.detectionType,
+    required this.imagePath,
+  });
 
   final DetectionType detectionType;
+  final String? imagePath;
 
   @override
-  State<AnalyzingScreen> createState() => _AnalyzingScreenState();
+  ConsumerState<AnalyzingScreen> createState() => _AnalyzingScreenState();
 }
 
-class _AnalyzingScreenState extends State<AnalyzingScreen>
+class _AnalyzingScreenState extends ConsumerState<AnalyzingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
+  bool _started = false;
 
   @override
   void initState() {
@@ -36,25 +46,48 @@ class _AnalyzingScreenState extends State<AnalyzingScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Auto-navigate to result after 2 seconds
-    Timer(const Duration(seconds: 2), () {
-      if (mounted) {
+    // Kick off the real analysis after first frame (needs ref + imagePath).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startAnalysis());
+  }
+
+  void _startAnalysis() {
+    if (_started) return;
+    _started = true;
+
+    final path = widget.imagePath;
+    if (path == null) {
+      // No image was passed in — nothing to analyze, bail out cleanly.
+      context.pushReplacement(
+        '/detection/result',
+        extra: {'detectionType': widget.detectionType},
+      );
+      return;
+    }
+
+    final language = ref.read(languageProvider).language;
+
+    ref.read(detectionProvider.notifier).analyze(
+          type: widget.detectionType,
+          filePath: path,
+          language: language,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Once the real API call resolves (success or failure), move on to the
+    // result screen — it reads the same detectionProvider state.
+    ref.listen<DetectionState>(detectionProvider, (previous, next) {
+      if (!mounted) return;
+      if (next.status == DetectionStatus.success ||
+          next.status == DetectionStatus.failure) {
         context.pushReplacement(
           '/detection/result',
           extra: {'detectionType': widget.detectionType},
         );
       }
     });
-  }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Center(
@@ -112,5 +145,11 @@ class _AnalyzingScreenState extends State<AnalyzingScreen>
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 }

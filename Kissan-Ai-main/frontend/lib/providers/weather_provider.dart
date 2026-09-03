@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/location_service.dart';
 import 'core_providers.dart';
-import '../core/storage/local_storage.dart';
 
 /// Daily forecast entry.
 class DailyForecast {
@@ -136,18 +136,20 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
   final Dio _dio;
 
+  /// When true, the weather is using the hardcoded Faisalabad default
+  /// because GPS and saved farm city both failed.
+  bool _usingDefaultLocation = false;
+
   Future<void> refresh() async {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      // Get location from storage or use default (Faisalabad)
-      final storage = LocalStorage.instance;
-      final city = storage.farmCity ?? 'Faisalabad';
-      final province = storage.farmProvince ?? 'Punjab';
+      // Resolve location via LocationService (GPS -> geocoded city -> default).
+      final resolved = await LocationService.instance.resolveLocation();
+      _usingDefaultLocation = resolved.isDefault;
 
-      // Default coordinates for Faisalabad; backend requires lat/lon.
-      double lat = 31.4504;
-      double lon = 73.1350;
+      final double lat = resolved.lat;
+      final double lon = resolved.lon;
 
       // Call backend weather endpoint with lat/lon
       final response = await _dio.get(
@@ -167,7 +169,7 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       final rainProb = (data['rain_probability'] as num?)?.round() ?? 20;
       final windSpeed = (data['wind_speed'] as num?)?.round() ?? 8;
       final description = data['description'] as String? ?? 'Clear';
-      final location = data['location'] as String? ?? '$city, $province';
+      final location = data['location'] as String? ?? resolved.label;
 
       state = WeatherState(
         temperatureC: temperature,
@@ -193,6 +195,9 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       );
     }
   }
+
+  /// Whether the provider fell back to the hardcoded default location.
+  bool get usingDefaultLocation => _usingDefaultLocation;
 
   /// Map backend description string to a display-friendly condition label.
   String _mapCondition(String description) {

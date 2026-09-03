@@ -17,3 +17,4 @@ class Image(Base):
     user = relationship("User", back_populates="images")
     disease_detection = relationship("DiseaseDetection", back_populates="image", uselist=False)
     pest_detection = relationship("PestDetection", back_populates="image", uselist=False)
+    plant_diagnosis = relationship("PlantDiagnosis", back_populates="image", uselist=False)

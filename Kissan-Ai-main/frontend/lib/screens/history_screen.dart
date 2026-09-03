@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,6 +46,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   List<_HistoryItem> _allItems = [];
   bool _loading = true;
   String? _error;
+  bool _retryAttempted = false;
 
   @override
   void initState() {
@@ -52,7 +54,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     _fetchHistory();
   }
 
-  Future<void> _fetchHistory() async {
+  Future<void> _fetchHistory({bool isRetry = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -106,16 +108,61 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         setState(() {
           _allItems = parsed;
           _loading = false;
+          _retryAttempted = false;
         });
       }
-    } catch (e) {
+    } on DioException catch (e) {
+      final errorMsg = _resolveDioError(e);
+
+      // Auto-retry once after 5s on timeout (Render cold-start wake-up).
+      if (!_retryAttempted && _isTimeoutError(e)) {
+        _retryAttempted = true;
+        await Future.delayed(const Duration(seconds: 5));
+        if (mounted) {
+          return _fetchHistory(isRetry: true);
+        }
+      }
+
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Failed to load history. Pull to refresh.';
+          _error = errorMsg;
+        });
+      }
+    } catch (e) {
+      debugPrint('History fetch error: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Something went wrong: $e';
         });
       }
     }
+  }
+
+  /// Returns true when the DioException is a timeout (cold-start symptom).
+  bool _isTimeoutError(DioException e) {
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout;
+  }
+
+  /// Maps a DioException to a user-friendly error string.
+  String _resolveDioError(DioException e) {
+    if (_isTimeoutError(e)) {
+      return 'Server is waking up, please retry in a moment.';
+    }
+    if (e.response?.statusCode == 401) {
+      return 'Your session has expired. Please log in again.';
+    }
+    if (e.type == DioExceptionType.connectionError) {
+      return 'Cannot reach the server. Check your internet connection.';
+    }
+    // Surface the real message for debugging.
+    final detail = e.response?.data is Map
+        ? (e.response!.data as Map)['detail']
+        : null;
+    return detail?.toString() ?? e.message ?? 'Failed to load history.';
   }
 
   String _formatDate(String iso) {

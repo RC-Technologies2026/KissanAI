@@ -6,13 +6,27 @@ import '../providers/language_provider.dart';
 import '../providers/weather_provider.dart';
 
 /// Dedicated weather screen with current conditions, hourly & 7-day forecast.
-class WeatherScreen extends ConsumerWidget {
+class WeatherScreen extends ConsumerStatefulWidget {
   const WeatherScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WeatherScreen> createState() => _WeatherScreenState();
+}
+
+class _WeatherScreenState extends ConsumerState<WeatherScreen> {
+  bool _locating = false;
+
+  Future<void> _useMyLocation() async {
+    setState(() => _locating = true);
+    await ref.read(weatherProvider.notifier).refresh();
+    if (mounted) setState(() => _locating = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final weather = ref.watch(weatherProvider);
     final lang = ref.watch(languageProvider);
+    final usingDefault = ref.read(weatherProvider.notifier).usingDefaultLocation;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -33,6 +47,20 @@ class WeatherScreen extends ConsumerWidget {
           ),
         ),
         actions: [
+          IconButton(
+            icon: _locating
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  )
+                : const Icon(Icons.my_location, color: AppColors.primary),
+            tooltip: 'Use my current location',
+            onPressed: _locating
+                ? null
+                : _useMyLocation,
+          ),
           IconButton(
             icon: weather.loading
                 ? const SizedBox(
@@ -82,6 +110,32 @@ class WeatherScreen extends ConsumerWidget {
                       icon: Icon(Icons.refresh, color: Colors.red.shade400),
                       onPressed: () =>
                           ref.read(weatherProvider.notifier).refresh(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Default-location banner
+            if (usingDefault) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 18, color: AppColors.warning),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Using default location \u2014 enable location or update your farm city in profile for accurate weather.',
+                        style: TextStyle(fontSize: 12, color: AppColors.bodyText, height: 1.4),
+                      ),
                     ),
                   ],
                 ),

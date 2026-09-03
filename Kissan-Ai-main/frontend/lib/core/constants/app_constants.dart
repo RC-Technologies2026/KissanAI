@@ -16,6 +16,7 @@ class ApiConstants {
   // Auth
   static const String register = '/api/auth/register';
   static const String login = '/api/auth/login';
+  static const String refresh = '/api/auth/refresh';
   static const String profile = '/api/auth/profile';
 
   // Onboarding
@@ -64,6 +65,7 @@ class HiveKeys {
   HiveKeys._();
 
   static const String token = 'jwt_token';
+  static const String refreshToken = 'refresh_token';
   static const String userId = 'user_id';
   static const String userName = 'user_name';
   static const String userEmail = 'user_email';
@@ -81,6 +83,8 @@ class HiveKeys {
   static const String farmLocation = 'farm_location';
   static const String farmerType = 'farmer_type';
   static const String userPhone = 'user_phone';
+  static const String farmLat = 'farm_lat';
+  static const String farmLon = 'farm_lon';
 }
 
 /// Onboarding data options.

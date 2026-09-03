@@ -13,6 +13,8 @@ from models.crop_recommendation import CropRecommendation
 from models.irrigation_guidance import IrrigationGuidance
 from models.chat_history import ChatHistory
 from models.analysis_history import AnalysisHistory
+from models.plant import Plant
+from models.plant_diagnosis import PlantDiagnosis
 
 __all__ = [
     "Base",
@@ -30,4 +32,6 @@ __all__ = [
     "IrrigationGuidance",
     "ChatHistory",
     "AnalysisHistory",
+    "Plant",
+    "PlantDiagnosis",
 ]

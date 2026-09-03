@@ -23,3 +23,4 @@ class User(Base):
     images = relationship("Image", back_populates="user")
     chat_history = relationship("ChatHistory", back_populates="user")
     analysis_history = relationship("AnalysisHistory", back_populates="user")
+    plants = relationship("Plant", back_populates="user", cascade="all, delete-orphan")

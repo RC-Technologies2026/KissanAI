@@ -85,7 +85,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final loginData = loginRes.data;
 
         final token = loginData['access_token'] as String;
+        final refreshToken = loginData['refresh_token'] as String?;
         await saveToken(token);
+        if (refreshToken != null) await saveRefreshToken(refreshToken);
       } catch (loginErr) {
         // If auto-login fails after successful registration, still save user info
         // so the user can manually log in.
@@ -129,10 +131,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await _api.login(email: email, password: password);
       final data = res.data;
 
-      // Backend returns Token: {access_token, token_type}
+      // Backend returns Token: {access_token, refresh_token, token_type}
       final token = data['access_token'] as String;
+      final refreshToken = data['refresh_token'] as String?;
 
       await saveToken(token);
+      if (refreshToken != null) await saveRefreshToken(refreshToken);
 
       // Backend doesn't return user details in login response.
       // Use email as the user identifier; preserve existing name if available.

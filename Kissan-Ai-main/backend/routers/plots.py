@@ -9,6 +9,7 @@ from models.plot_livestock import PlotLivestock
 from models.user import User
 from schemas.plot import (
     PlotCreate,
+    PlotUpdate,
     PlotResponse,
     PlotDetailResponse,
     PlotCropCreate,
@@ -60,6 +61,33 @@ async def list_plots(
 ):
     result = await db.execute(select(Plot).where(Plot.user_id == current_user.id))
     return result.scalars().all()
+
+
+@router.put("/{plot_id}", response_model=PlotResponse)
+async def update_plot(
+    plot_id: str,
+    body: PlotUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    plot = await _get_owned_plot(plot_id, db, current_user)
+    update_data = body.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(plot, field, value)
+    await db.commit()
+    await db.refresh(plot)
+    return plot
+
+
+@router.delete("/{plot_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plot(
+    plot_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    plot = await _get_owned_plot(plot_id, db, current_user)
+    await db.delete(plot)
+    await db.commit()
 
 
 @router.get("/{plot_id}", response_model=PlotDetailResponse)

@@ -10,15 +10,15 @@ class DiseaseDetectionResponse(BaseModel):
     crop_name: Optional[str] = None
     disease_name: str
     disease_category: Optional[str] = None
-    confidence_score: float
-    model_version: str
-    detected_at: datetime
+    confidence_score: Optional[float] = None
+    model_version: Optional[str] = None
+    detected_at: Optional[datetime] = None
     diagnosis: Optional[str] = None
 
 
 class DiseaseFallbackResponse(BaseModel):
-    message: str
-    top_candidates: List[str]
-    confidence_score: float
-    threshold: float
-    image_id: UUID
+    message: str = "Photo unclear — please retake"
+    top_candidates: List[str] = []
+    confidence_score: float = 0.0
+    threshold: float = 0.0
+    image_id: Optional[UUID] = None

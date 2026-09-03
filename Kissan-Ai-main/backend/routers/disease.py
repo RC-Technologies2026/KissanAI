@@ -7,7 +7,7 @@ from models.image import Image
 from models.disease_detection import DiseaseDetection
 from models.analysis_history import AnalysisHistory
 from models.user import User
-from schemas.disease import DiseaseDetectionResponse
+from schemas.disease import DiseaseDetectionResponse, DiseaseFallbackResponse
 from auth.utils import get_current_user
 from cloudinary import uploader
 from utils.validation import check_magic_bytes, validate_extension, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
@@ -83,22 +83,29 @@ async def detect_disease(
     await db.refresh(image)
 
     # --- 6. Structured Multi-Model Fallback Leaf Diagnosis in Requested Language ---
-    parsed_data, formatted_markdown, model_used = await gemini_service.diagnose_leaf_image(
+    result = await gemini_service.diagnose_leaf_image(
         image_bytes=contents,
         mime_type=content_type,
         language=selected_language,
-        timeout=15.0,
+        timeout=45.0,
         crop_name=crop_name,
     )
+
+    # --- 6b. Handle genuinely-unusable image fallback ---
+    if isinstance(result, DiseaseFallbackResponse):
+        # Image was too blurry / dark / no plant visible — ask farmer to retake.
+        return result
+
+    parsed_data, formatted_markdown, model_used = result
 
     # Dynamically extract localized disease_name and confidence_score
     disease_name = parsed_data.get("disease_name") or "Plant Disease Diagnosis"
     disease_category = parsed_data.get("disease_category")
-    confidence_val = parsed_data.get("confidence_score", 0.95)
+    confidence_val = parsed_data.get("confidence_score")
     try:
-        confidence_score = float(confidence_val)
+        confidence_score = float(confidence_val) if confidence_val is not None else None
     except (ValueError, TypeError):
-        confidence_score = 0.95
+        confidence_score = None
 
     # --- 7. Save detection record to database ---
     detection = DiseaseDetection(

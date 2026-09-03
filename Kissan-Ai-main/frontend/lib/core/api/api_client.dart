@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Dio singleton instance — lazily created.
 class ApiClient {
@@ -7,11 +9,34 @@ class ApiClient {
   static final ApiClient instance = ApiClient._();
 
   late final Dio _dio;
+  Timer? _keepAliveTimer;
 
   /// Must be called once at app startup after [Dio] is configured.
-  void init(Dio dio) => _dio = dio;
+  void init(Dio dio) {
+    _dio = dio;
+    _startKeepAlive();
+  }
 
   Dio get dio => _dio;
+
+  /// Pings the lightweight /health endpoint every 10 minutes so the
+  /// Render free-tier backend does not go to sleep (cold-start adds ~60s).
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (_) async {
+      try {
+        await _dio.get('/health');
+      } catch (e) {
+        debugPrint('Keep-alive ping failed: $e');
+      }
+    });
+  }
+
+  /// Cancel the keep-alive timer (e.g. on logout).
+  void dispose() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+  }
 
   // ─── Auth ────────────────────────────────────────────────
 
@@ -38,6 +63,9 @@ class ApiClient {
       });
 
   Future<Response> getProfile() => _dio.get('/api/auth/profile');
+
+  Future<Response> refreshToken(String refreshToken) =>
+      _dio.post('/api/auth/refresh', data: {'refresh_token': refreshToken});
 
   // ─── Onboarding ──────────────────────────────────────────
 
@@ -116,9 +144,15 @@ class ApiClient {
 
   Future<Response> getCropRecommendation({
     required String plotId,
+    String? season,
+    String? soilType,
+    String? waterAvailability,
   }) =>
       _dio.post('/api/irrigation/recommend', data: {
         'plot_id': plotId,
+        if (season != null) 'season': season,
+        if (soilType != null) 'soil_type': soilType,
+        if (waterAvailability != null) 'water_availability': waterAvailability,
       });
 
   // ─── Plots ───────────────────────────────────────────────
@@ -142,6 +176,12 @@ class ApiClient {
         if (longitude != null) 'longitude': longitude,
       });
 
+  Future<Response> updatePlot(String plotId, Map<String, dynamic> data) =>
+      _dio.put('/api/plots/$plotId', data: data);
+
+  Future<Response> deletePlot(String plotId) =>
+      _dio.delete('/api/plots/$plotId');
+
   // ─── Irrigation ──────────────────────────────────────────
 
   Future<Response> getIrrigationGuide(String cropRecommendationId) =>
@@ -162,4 +202,42 @@ class ApiClient {
         if (analysisType != null) 'analysis_type': analysisType,
         'limit': limit,
       });
+
+  // ─── Plants (houseplants / ornamental plants) ────────────
+
+  /// List all plants for the authenticated user.
+  Future<Response> getPlants() => _dio.get('/api/plants');
+
+  /// Create / register a new plant.
+  Future<Response> createPlant({
+    required String plantName,
+    String? species,
+    String? imageUrl,
+    String? healthStatus,
+    String? notes,
+  }) =>
+      _dio.post('/api/plants', data: {
+        'plant_name': plantName,
+        if (species != null) 'species': species,
+        if (imageUrl != null) 'image_url': imageUrl,
+        if (healthStatus != null) 'health_status': healthStatus,
+        if (notes != null) 'notes': notes,
+      });
+
+  /// Get a single plant by ID.
+  Future<Response> getPlant(String plantId) =>
+      _dio.get('/api/plants/$plantId');
+
+  /// Upload an image and run plant diagnosis for a specific plant.
+  Future<Response> diagnosePlant(
+    String plantId,
+    String filePath, {
+    String language = 'english',
+  }) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath),
+      'language': language,
+    });
+    return _dio.post('/api/plants/$plantId/diagnose', data: formData);
+  }
 }
