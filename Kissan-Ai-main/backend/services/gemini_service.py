@@ -68,12 +68,13 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
     treatment: List[str] = Field(description="Treatment steps including product+dosage")
     image_quality: _ImageQualitySchema = Field(description="Assessment of whether the image is usable for diagnosis")
 
-# Valid Gemini model names (verified). Keep the list short so diagnosis is fast;
-# each model gets its own timeout attempt.
+# Valid Gemini model names (verified as of Sep 2026).
+# Older models (gemini-2.0-flash, gemini-1.5-flash, gemini-2.0-flash-lite)
+# are deprecated and return 404 NOT_FOUND.
 models_to_try = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
 ]
 
 
