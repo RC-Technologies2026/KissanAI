@@ -14,6 +14,56 @@ from schemas.disease import DiseaseFallbackResponse
 from schemas.pest import PestFallbackResponse
 from schemas.plant import PlantDiagnosisFallbackResponse
 
+
+def _extract_json(text: str) -> Optional[str]:
+    """Extract the first well-formed JSON object from a possibly malformed string.
+
+    Handles truncated/unterminated JSON by finding a balanced brace block.
+    Returns None if no JSON object can be extracted.
+    """
+    cleaned = text.strip()
+    if "```" in cleaned:
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+        if m:
+            cleaned = m.group(1)
+
+    start = cleaned.find("{")
+    if start == -1:
+        return None
+
+    end = start
+    depth = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(cleaned[start:], start=start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    if depth != 0:
+        return None
+    candidate = cleaned[start:end]
+    try:
+        json.loads(candidate)
+        return candidate
+    except (json.JSONDecodeError, ValueError):
+        return None
+
 logger = logging.getLogger(__name__)
 
 # Fixed English category keys the rules engine understands. Gemini is asked
@@ -270,23 +320,19 @@ class GeminiService:
 
                     # When structured output is requested, verify the response
                     # is actually parseable JSON.  Some models may still return
-                    # malformed JSON despite response_mime_type — treat that as
-                    # a failure and fall through to the next model.
+                    # malformed JSON despite response_mime_type — try to repair
+                    # it first; only fall through to the next model if repair fails.
                     if validate_json:
-                        try:
-                            cleaned = text
-                            if "```" in cleaned:
-                                m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
-                                if m:
-                                    cleaned = m.group(1)
-                            json.loads(cleaned)
-                        except (json.JSONDecodeError, ValueError) as je:
-                            last_exception = je
-                            logger.warning(
-                                "Model %s returned invalid JSON (%s), falling back to next model...",
-                                model, je,
-                            )
-                            continue  # try next model
+                        cleaned = _extract_json(text)
+                        if cleaned is not None:
+                            return cleaned, model
+                        je = json.JSONDecodeError("No valid JSON object found", text, 0)
+                        last_exception = je
+                        logger.warning(
+                            "Model %s returned invalid JSON, falling back to next model...",
+                            model,
+                        )
+                        continue  # try next model
 
                     return text, model
             except asyncio.TimeoutError as e:
@@ -360,12 +406,7 @@ class GeminiService:
         # Parse JSON output from Gemini response
         parsed_data: Dict[str, Any] = {}
         try:
-            # Strip markdown json block wrappers if present
-            cleaned_json = raw_response
-            if "```" in cleaned_json:
-                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_json)
-                if match:
-                    cleaned_json = match.group(1)
+            cleaned_json = _extract_json(raw_response) or raw_response
             parsed_data = json.loads(cleaned_json)
         except Exception as json_err:
             logger.warning("Failed to parse direct JSON from Gemini: %s. Using text extraction.", json_err)
@@ -471,11 +512,7 @@ class GeminiService:
         # Parse JSON output from Gemini response
         parsed_data: Dict[str, Any] = {}
         try:
-            cleaned_json = raw_response
-            if "```" in cleaned_json:
-                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_json)
-                if match:
-                    cleaned_json = match.group(1)
+            cleaned_json = _extract_json(raw_response) or raw_response
             parsed_data = json.loads(cleaned_json)
         except Exception as json_err:
             logger.warning("Failed to parse pest JSON from Gemini: %s. Using text extraction.", json_err)
@@ -580,10 +617,7 @@ class GeminiService:
         parsed_data: Dict[str, Any] = {}
         try:
             cleaned_json = raw_response
-            if "```" in cleaned_json:
-                match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_json)
-                if match:
-                    cleaned_json = match.group(1)
+            cleaned_json = _extract_json(raw_response) or raw_response
             parsed_data = json.loads(cleaned_json)
         except Exception as json_err:
             logger.warning("Failed to parse plant diagnosis JSON from Gemini: %s. Using text extraction.", json_err)
