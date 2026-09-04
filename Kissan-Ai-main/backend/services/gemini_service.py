@@ -3,10 +3,12 @@ import json
 import asyncio
 import logging
 import re
+import base64
 from typing import Optional, List, Union, Tuple, Any, Dict
 from pydantic import BaseModel, Field
 from fastapi import HTTPException, status
 from google import genai
+import httpx
 from prompts import KISSAN_SYSTEM_PROMPT, PLANT_DIAGNOSIS_PROMPT
 from rules_engine.pesticide_rules import PESTICIDE_RULES
 from rules_engine.insecticide_rules import INSECTICIDE_RULES
@@ -64,6 +66,87 @@ def _extract_json(text: str) -> Optional[str]:
     except (json.JSONDecodeError, ValueError):
         return None
 
+
+# ---------------------------------------------------------------------------
+# Grok (xAI) client for vision tasks — free tier, OpenAI-compatible API.
+# Used as primary for disease/pest/plant image analysis.
+# ---------------------------------------------------------------------------
+class GrokVisionClient:
+    """Simple async client for Grok vision via OpenAI-compatible API."""
+
+    GROK_API_URL = "https://api.x.ai/v1/chat/completions"
+    GROK_VISION_MODEL = "grok-2-vision-1212"
+
+    def __init__(self):
+        self.api_key = os.environ.get("GROK_API_KEY", "").strip()
+        self.client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self.client is None or self.client.is_closed:
+            self.client = httpx.AsyncClient(
+                timeout=httpx.Timeout(45.0, connect=10.0),
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+        return self.client
+
+    async def close(self):
+        if self.client and not self.client.is_closed:
+            await self.client.aclose()
+
+    async def analyze_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str,
+        prompt: str,
+        model: Optional[str] = None,
+    ) -> str:
+        """Send image + prompt to Grok vision and return response text."""
+        if not self.api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="GROK_API_KEY is not configured.",
+            )
+
+        # Encode image as base64 data URL
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        data_url = f"data:{mime_type};base64,{b64}"
+
+        payload = {
+            "model": model or self.GROK_VISION_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2048,
+        }
+
+        client = self._get_client()
+        response = await client.post(self.GROK_API_URL, json=payload)
+
+        if response.status_code != 200:
+            error_text = response.text[:200]
+            logger.warning("Grok API error %d: %s", response.status_code, error_text)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Grok API failed: {response.status_code}",
+            )
+
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+
+# Global Grok client instance
+_grok_client = GrokVisionClient()
+
 logger = logging.getLogger(__name__)
 
 # Fixed English category keys the rules engine understands. Gemini is asked
@@ -119,14 +202,10 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
     image_quality: _ImageQualitySchema = Field(description="Assessment of whether the image is usable for diagnosis")
 
 # Valid Gemini model names (verified as of Sep 2026).
-# Older models (gemini-2.0-flash, gemini-1.5-flash, gemini-2.0-flash-lite)
-# are deprecated and return 404 NOT_FOUND.
-#
-# Order matters: the FIRST model that works is used.  gemini-2.5-flash is the
-# fastest confirmed-working model, so it goes first.  Newer models are kept
-# as future fallbacks but must NOT delay the fast path.
+# gemini-2.5-flash is retired (404 NOT_FOUND for new users).
+# gemini-3.6-flash is the current recommended replacement.
 models_to_try = [
-    "gemini-2.5-flash",
+    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
 ]
@@ -134,7 +213,7 @@ models_to_try = [
 # Chat-only model list — use the absolute fastest model for text Q&A.
 # Chat responses should feel instant (< 5 s), so we skip heavier models.
 chat_models_to_try = [
-    "gemini-2.5-flash",
+    "gemini-3.6-flash",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
@@ -385,22 +464,43 @@ class GeminiService:
         """
         active_prompt = prompt or build_diagnosis_prompt(language=language, crop_name=crop_name)
 
-        contents = [
-            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            active_prompt,
-        ]
+        # Try Grok first (free tier, vision-capable), fall back to Gemini
+        raw_response = None
+        model_used = "grok-2-vision"
 
-        # Use Gemini structured output to guarantee well-formed JSON with all
-        # required fields — prevents silent fallback to generic placeholders.
-        structured_config = self._build_structured_config(_DiseaseStructuredResponse)
+        if _grok_client.api_key:
+            try:
+                logger.info("Attempting disease diagnosis with Grok vision...")
+                raw_response = await _grok_client.analyze_image(
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                    prompt=active_prompt + "\n\nRespond ONLY with valid JSON. Do not include markdown code blocks.",
+                )
+                # Validate JSON
+                cleaned = _extract_json(raw_response)
+                if cleaned:
+                    raw_response = cleaned
+                else:
+                    logger.warning("Grok returned invalid JSON, falling back to Gemini...")
+                    raw_response = None
+            except Exception as e:
+                logger.warning("Grok vision failed: %s, falling back to Gemini...", e)
+                raw_response = None
 
-        raw_response, model_used = await self.generate_content_with_fallback(
-            contents=contents,
-            config=structured_config,
-            models_list=models_list,
-            timeout=timeout,
-            validate_json=True,
-        )
+        # Fall back to Gemini if Grok failed
+        if not raw_response:
+            contents = [
+                genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                active_prompt,
+            ]
+            structured_config = self._build_structured_config(_DiseaseStructuredResponse)
+            raw_response, model_used = await self.generate_content_with_fallback(
+                contents=contents,
+                config=structured_config,
+                models_list=models_list,
+                timeout=timeout,
+                validate_json=True,
+            )
 
         # Parse JSON output from Gemini response
         parsed_data: Dict[str, Any] = {}
@@ -491,22 +591,42 @@ class GeminiService:
         """
         active_prompt = prompt or build_pest_prompt(language=language, crop_name=crop_name)
 
-        contents = [
-            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            active_prompt,
-        ]
+        # Try Grok first (free tier, vision-capable), fall back to Gemini
+        raw_response = None
+        model_used = "grok-2-vision"
 
-        # Use Gemini structured output to guarantee well-formed JSON with all
-        # required fields — prevents silent fallback to generic placeholders.
-        structured_config = self._build_structured_config(_PestStructuredResponse)
+        if _grok_client.api_key:
+            try:
+                logger.info("Attempting pest identification with Grok vision...")
+                raw_response = await _grok_client.analyze_image(
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                    prompt=active_prompt + "\n\nRespond ONLY with valid JSON. Do not include markdown code blocks.",
+                )
+                cleaned = _extract_json(raw_response)
+                if cleaned:
+                    raw_response = cleaned
+                else:
+                    logger.warning("Grok returned invalid JSON for pest, falling back to Gemini...")
+                    raw_response = None
+            except Exception as e:
+                logger.warning("Grok pest vision failed: %s, falling back to Gemini...", e)
+                raw_response = None
 
-        raw_response, model_used = await self.generate_content_with_fallback(
-            contents=contents,
-            config=structured_config,
-            models_list=models_list,
-            timeout=timeout,
-            validate_json=True,
-        )
+        # Fall back to Gemini if Grok failed
+        if not raw_response:
+            contents = [
+                genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                active_prompt,
+            ]
+            structured_config = self._build_structured_config(_PestStructuredResponse)
+            raw_response, model_used = await self.generate_content_with_fallback(
+                contents=contents,
+                config=structured_config,
+                models_list=models_list,
+                timeout=timeout,
+                validate_json=True,
+            )
 
         # Parse JSON output from Gemini response
         parsed_data: Dict[str, Any] = {}
