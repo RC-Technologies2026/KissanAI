@@ -224,7 +224,13 @@ async def get_weather_forecast(
         })
 
     # --- 3. Get current weather ---
-    current = await get_current_weather(request, lat, lon, db, current_user)
+    current = await get_current_weather(
+        request=request,
+        lat=lat,
+        lon=lon,
+        db=db,
+        current_user=current_user,
+    )
 
     # --- 4. Aggregate 3-hour data into daily ---
     daily_map: dict[str, list] = {}  # date_str -> list of 3-hour entries

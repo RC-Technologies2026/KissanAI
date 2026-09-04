@@ -212,7 +212,8 @@ models_to_try = [
 
 # Chat-only model list — 3.5 models for text Q&A (2.5-flash retired for new users).
 chat_models_to_try = [
-    "gemini-3.5-flash"
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",  # backup — prevents 502 when 3.5-flash times out
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
@@ -434,7 +435,7 @@ class GeminiService:
         # with a shorter timeout so responses feel instant.
         if models_list is None:
             models_list = chat_models_to_try
-            timeout = min(timeout, 15.0)
+            timeout = min(timeout, 20.0)  # 20s — enough for cold start + API call
         text, _ = await self.generate_content_with_fallback(
             contents=message,
             models_list=models_list,
