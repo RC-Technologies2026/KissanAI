@@ -138,12 +138,12 @@ chat_models_to_try = [
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID). 3.5-flash-lite is fastest for structured JSON output; 2.5-flash
-# is the final fallback when 3.5 models are unavailable.
+# crop ID). gemini-3.6-flash is the current recommended model; 3.5 models
+# may return 403 on free-tier API keys.
 vision_models_to_try = [
+    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
-    "gemini-2.5-flash",
 ]
 
 
