@@ -62,7 +62,7 @@ class _ResultBody extends StatelessWidget {
   ];
 
   bool get _isHighConfidence =>
-      result.confidence != null && result.confidence! >= 0.50;
+      result.confidence != null && result.confidence! >= 0.70;
 
   String? get _confPercent =>
       result.confidence != null ? (result.confidence! * 100).round().toString() : null;
