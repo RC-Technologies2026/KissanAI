@@ -210,9 +210,9 @@ models_to_try = [
     "gemini-3.6-flash",
 ]
 
-# Chat-only model list — use the absolute fastest model for text Q&A.
+# Chat-only model list — gemini-2.5-flash is fastest for text Q&A.
 chat_models_to_try = [
-    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
