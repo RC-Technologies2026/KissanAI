@@ -165,94 +165,65 @@ class _RecommendationScreenState extends ConsumerState<RecommendationScreen> {
                             const SizedBox(height: 20),
                           ],
 
-                          // Product card
+                          // Product cards (2-3 options)
+                          Text(
+                            'Recommended Products',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.headingText,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...(_buildProductCards()),
+                          const SizedBox(height: 20),
+                          
+                          // Safety card
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: AppColors.surface,
+                              color: const Color(0xFFFFF1F1),
                               borderRadius: BorderRadius.circular(20),
+                              border: const Border(
+                                left: BorderSide(
+                                    color: AppColors.error, width: 3),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  _recommendation!['product_name'] ??
-                                      'Product',
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.headingText,
+                                const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded,
+                                        color: AppColors.error, size: 22),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Safety Precautions',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.headingText,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  '• Wear gloves, mask, and full sleeves during application\n'
+                                  '• Do not spray in strong wind or during flowering\n'
+                                  '• Keep away from children, food, and water sources\n'
+                                  '• Follow product label instructions for dosage\n'
+                                  '• Wash hands and exposed skin after use',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.bodyText,
+                                    height: 1.5,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                _infoRow(
-                                    Icons.medication,
-                                    'Dosage',
-                                    _recommendation!['dosage'] ?? 'N/A'),
-                                const SizedBox(height: 12),
-                                _infoRow(
-                                    Icons.water_drop,
-                                    'Application Method',
-                                    _recommendation!['application_method'] ??
-                                        'N/A'),
-                                if (_recommendation!['application_guidance'] !=
-                                    null) ...[
-                                  const SizedBox(height: 12),
-                                  _infoRow(
-                                      Icons.check_circle_outline,
-                                      'Guidance',
-                                      _recommendation![
-                                          'application_guidance']),
-                                ],
                               ],
                             ),
                           ),
-                          const SizedBox(height: 20),
-
-                          // Safety card
-                          if (_recommendation!['safety_precautions'] != null)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF1F1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: const Border(
-                                  left: BorderSide(
-                                      color: AppColors.error, width: 3),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.warning_amber_rounded,
-                                          color: AppColors.error, size: 22),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Safety Precautions',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.headingText,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _recommendation!['safety_precautions'],
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: AppColors.bodyText,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           const SizedBox(height: 24),
 
                           // Back to Dashboard — outline green
@@ -304,5 +275,81 @@ class _RecommendationScreenState extends ConsumerState<RecommendationScreen> {
         ),
       ],
     );
+  }
+
+  List<Widget> _buildProductCards() {
+    final products = _recommendation!['products'] as List? ?? [];
+    if (products.isEmpty) {
+      return [const Text('No products available')];
+    }
+
+    return products.asMap().entries.map((entry) {
+      final index = entry.key;
+      final product = entry.value as Map<String, dynamic>;
+      final isPrimary = index == 0;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: isPrimary
+              ? Border.all(color: AppColors.primary, width: 2)
+              : Border.all(color: AppColors.divider, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product name + badge
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    product['product_name'] ?? 'Product',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: isPrimary ? AppColors.primary : AppColors.headingText,
+                    ),
+                  ),
+                ),
+                if (isPrimary)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: const Text(
+                      'Best',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _infoRow(
+                Icons.medication, 'Dosage', product['dosage'] ?? 'N/A'),
+            const SizedBox(height: 8),
+            _infoRow(
+                Icons.water_drop,
+                'Application Method',
+                product['application_method'] ?? 'N/A'),
+            if (product['application_guidance'] != null) ...[
+              const SizedBox(height: 8),
+              _infoRow(
+                  Icons.check_circle_outline,
+                  'Guidance',
+                  product['application_guidance']),
+            ],
+          ],
+        ),
+      );
+    }).toList();
   }
 }

@@ -6,7 +6,7 @@ from models.disease_detection import DiseaseDetection
 from models.pesticide_recommendation import PesticideRecommendation
 from models.weather_cache import WeatherCache
 from models.user import User
-from schemas.pesticide import PesticideRecommendationRequest, PesticideRecommendationResponse
+from schemas.pesticide import PesticideRecommendationRequest, PesticideRecommendationResponse, PesticideProduct
 from auth.utils import get_current_user
 from rules_engine.pesticide_rules import get_pesticide_recommendation, get_default_pesticide
 from rules_engine.weather_gate import is_weather_safe
@@ -33,9 +33,9 @@ async def recommend_pesticide(
     # localized disease_name) since disease_name may be translated/free-form
     # and won't reliably match the rules engine's fixed keys. Fall back to
     # disease_name for older rows saved before disease_category existed.
-    rule = get_pesticide_recommendation(detection.disease_category or detection.disease_name)
-    if rule is None:
-        rule = get_default_pesticide()
+    products = get_pesticide_recommendation(detection.disease_category or detection.disease_name)
+    if not products:
+        products = get_default_pesticide()
 
     weather_blocked = False
     if body.lat is not None and body.lon is not None:
@@ -50,17 +50,26 @@ async def recommend_pesticide(
         if weather:
             weather_blocked = not is_weather_safe(weather.rain_probability, weather.wind_speed)
 
+    # Save primary (first) product to DB
+    primary = products[0]
     recommendation = PesticideRecommendation(
         disease_detection_id=detection.id,
-        product_name=rule["product_name"],
-        dosage=rule["dosage"],
-        application_method=rule.get("application_method"),
+        product_name=primary["product_name"],
+        dosage=primary["dosage"],
+        application_method=primary.get("application_method"),
         weather_blocked=weather_blocked,
-        application_guidance=rule.get("application_guidance"),
-        safety_precautions=rule.get("safety_precautions"),
+        application_guidance=primary.get("application_guidance"),
+        safety_precautions=primary.get("safety_precautions"),
     )
     db.add(recommendation)
     await db.commit()
     await db.refresh(recommendation)
 
-    return recommendation
+    # Return all product options in response
+    return PesticideRecommendationResponse(
+        id=recommendation.id,
+        disease_detection_id=recommendation.disease_detection_id,
+        products=[PesticideProduct(**p) for p in products],
+        weather_blocked=recommendation.weather_blocked,
+        created_at=recommendation.created_at,
+    )

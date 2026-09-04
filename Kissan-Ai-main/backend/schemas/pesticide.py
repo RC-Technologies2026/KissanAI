@@ -1,7 +1,15 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+
+
+class PesticideProduct(BaseModel):
+    product_name: str
+    dosage: str
+    application_method: Optional[str] = None
+    application_guidance: Optional[str] = None
+    safety_precautions: Optional[str] = None
 
 
 class PesticideRecommendationRequest(BaseModel):
@@ -13,12 +21,8 @@ class PesticideRecommendationRequest(BaseModel):
 class PesticideRecommendationResponse(BaseModel):
     id: UUID
     disease_detection_id: UUID
-    product_name: str
-    dosage: str
-    application_method: Optional[str] = None
+    products: List[PesticideProduct]
     weather_blocked: bool
-    application_guidance: Optional[str] = None
-    safety_precautions: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
