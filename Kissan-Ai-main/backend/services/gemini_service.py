@@ -210,12 +210,12 @@ models_to_try = [
     "gemini-3.5-flash-lite",
 ]
 
-# Chat-only model list — optimized for speed + reliability.
-# 3.5-flash first (fastest), 3.6-flash backup, flash-lite last resort.
+# Chat-only model list — optimized for speed.
+# Uses flash-lite first (lighter, faster) to avoid competing with vision tasks.
 chat_models_to_try = [
+    "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
@@ -439,7 +439,7 @@ class GeminiService:
         # with a shorter timeout so responses feel instant.
         if models_list is None:
             models_list = chat_models_to_try
-            timeout = min(timeout, 30.0)  # 30s — handles cold start + high demand
+            timeout = min(timeout, 15.0)  # 15s — chat should feel instant
         text, _ = await self.generate_content_with_fallback(
             contents=message,
             models_list=models_list,
