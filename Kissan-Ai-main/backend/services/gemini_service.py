@@ -215,15 +215,13 @@ models_to_try = [
 chat_models_to_try = [
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
-    "gemini-3.6-flash",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID). All three models for maximum reliability under load.
+# crop ID). Only 2 models — flash-lite is too weak for images.
 vision_models_to_try = [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
 ]
 
 

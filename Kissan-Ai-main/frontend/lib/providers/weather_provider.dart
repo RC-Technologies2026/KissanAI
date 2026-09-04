@@ -161,8 +161,9 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
   /// Force GPS acquisition and fetch weather. Clears any cached/default
   /// location so the user gets a live location reading.
+  /// Refresh weather using GPS location — does NOT show full loading spinner.
+  /// Only the location icon shows a small spinner; the rest of the UI stays responsive.
   Future<void> refreshWithGps() async {
-    state = state.copyWith(loading: true, error: null);
     try {
       final storage = LocalStorage.instance;
       storage.farmLat = null;
@@ -170,7 +171,6 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       await _fetchWeather(force: true);
     } catch (e) {
       state = state.copyWith(
-        loading: false,
         error: AppError.fromException(e),
       );
     }

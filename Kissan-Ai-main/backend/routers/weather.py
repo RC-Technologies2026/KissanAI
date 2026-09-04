@@ -216,11 +216,14 @@ async def get_weather_forecast(
     hourly_forecasts: list[dict] = []
     for item in owm.get("list", [])[:8]:
         dt = datetime.fromtimestamp(item["dt"])
+        # Cap rain chance at 80% — OWM sometimes returns 1.0 (100%) unrealistically
+        raw_pop = item.get("pop", 0)
+        rain_chance = min(round(raw_pop * 100), 80)
         hourly_forecasts.append({
             "hour": dt.strftime("%I %p"),
             "temp": round(item["main"]["temp"]),
             "condition_icon": item["weather"][0]["description"],
-            "rain_chance": round((item.get("pop", 0) * 100)),
+            "rain_chance": rain_chance,
         })
 
     # --- 3. Get current weather ---
