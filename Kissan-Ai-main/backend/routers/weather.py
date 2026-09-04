@@ -40,6 +40,7 @@ async def get_current_weather(
     request: Request,
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
+    force: bool = Query(False, description="Bypass Redis cache"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -53,7 +54,7 @@ async def get_current_weather(
     cache_key = f"weather:{location}"
 
     # --- 1. Check Redis cache ---
-    cached_data = await redis_get(cache_key)
+    cached_data = None if force else await redis_get(cache_key)
     if cached_data:
         logger.info("Cache HIT for %s", cache_key)
         data = json.loads(cached_data)
@@ -164,6 +165,7 @@ async def get_weather_forecast(
     request: Request,
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
+    force: bool = Query(False, description="Bypass Redis cache"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -181,7 +183,7 @@ async def get_weather_forecast(
     forecast_key = f"forecast:{location}"
 
     # --- 1. Check Redis cache ---
-    cached = await redis_get(forecast_key)
+    cached = None if force else await redis_get(forecast_key)
     if cached:
         data = json.loads(cached)
         return WeatherForecastResponse(**data)
@@ -209,6 +211,17 @@ async def get_weather_forecast(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Forecast service unavailable",
         )
+
+    # Build hourly forecast from the next 8 x 3-hour entries
+    hourly_forecasts: list[dict] = []
+    for item in owm.get("list", [])[:8]:
+        dt = datetime.fromtimestamp(item["dt"])
+        hourly_forecasts.append({
+            "hour": dt.strftime("%I %p"),
+            "temp": round(item["main"]["temp"]),
+            "condition_icon": item["weather"][0]["description"],
+            "rain_chance": round((item.get("pop", 0) * 100)),
+        })
 
     # --- 3. Get current weather ---
     current = await get_current_weather(request, lat, lon, db, current_user)
@@ -316,6 +329,7 @@ async def get_weather_forecast(
     result = WeatherForecastResponse(
         location=location,
         current=current,
+        hourly=hourly_forecasts,
         daily=daily_forecasts,
         alerts=alerts,
     )

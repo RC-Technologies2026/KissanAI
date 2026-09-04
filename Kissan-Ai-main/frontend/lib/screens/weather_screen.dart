@@ -18,7 +18,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
 
   Future<void> _useMyLocation() async {
     setState(() => _locating = true);
-    await ref.read(weatherProvider.notifier).refreshLocation();
+    await ref.read(weatherProvider.notifier).refreshWithGps();
     if (mounted) setState(() => _locating = false);
   }
 
@@ -72,7 +72,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                 : const Icon(Icons.refresh, color: AppColors.primary),
             onPressed: weather.loading
                 ? null
-                : () => ref.read(weatherProvider.notifier).refresh(),
+                : () => ref.read(weatherProvider.notifier).refresh(force: true),
           ),
         ],
       ),
@@ -109,7 +109,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                     IconButton(
                       icon: Icon(Icons.refresh, color: Colors.red.shade400),
                       onPressed: () =>
-                          ref.read(weatherProvider.notifier).refresh(),
+                          ref.read(weatherProvider.notifier).refresh(force: true),
                     ),
                   ],
                 ),

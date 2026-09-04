@@ -25,8 +25,16 @@ class DailyForecastItem(BaseModel):
     wind_speed: int
 
 
+class HourlyForecastItem(BaseModel):
+    hour: str
+    temp: int
+    condition_icon: str
+    rain_chance: int
+
+
 class WeatherForecastResponse(BaseModel):
     location: str
     current: WeatherResponse
+    hourly: List[HourlyForecastItem] = []
     daily: List[DailyForecastItem]
     alerts: List[str] = []

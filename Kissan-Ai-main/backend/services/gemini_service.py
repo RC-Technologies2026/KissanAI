@@ -219,7 +219,6 @@ chat_models_to_try = [
 # crop ID). 3.5-flash is fastest and most reliable; flash-lite times out.
 vision_models_to_try = [
     "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
     "gemini-3.6-flash",
 ]
 
@@ -491,10 +490,12 @@ class GeminiService:
                 genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 active_prompt,
             ]
-            structured_config = self._build_structured_config(_DiseaseStructuredResponse)
+            # Use the normal (non-structured) config. The prompt already
+            # contains the exact JSON schema example, and structured output
+            # frequently returns malformed JSON under high demand.
             raw_response, model_used = await self.generate_content_with_fallback(
                 contents=contents,
-                config=structured_config,
+                config=self.config,
                 models_list=models_list,
                 timeout=timeout,
                 validate_json=True,
@@ -617,10 +618,12 @@ class GeminiService:
                 genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 active_prompt,
             ]
-            structured_config = self._build_structured_config(_PestStructuredResponse)
+            # Use the normal (non-structured) config. The prompt already
+            # contains the exact JSON schema example, and structured output
+            # frequently returns malformed JSON under high demand.
             raw_response, model_used = await self.generate_content_with_fallback(
                 contents=contents,
-                config=structured_config,
+                config=self.config,
                 models_list=models_list,
                 timeout=timeout,
                 validate_json=True,
@@ -720,11 +723,12 @@ class GeminiService:
             active_prompt,
         ]
 
-        structured_config = self._build_structured_config(_PlantDiagnosisStructuredResponse)
-
+        # Use the normal (non-structured) config. The prompt already
+        # contains the exact JSON schema example, and structured output
+        # frequently returns malformed JSON under high demand.
         raw_response, model_used = await self.generate_content_with_fallback(
             contents=contents,
-            config=structured_config,
+            config=self.config,
             models_list=models_list,
             timeout=timeout,
             validate_json=True,

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/location_service.dart';
+import '../core/storage/local_storage.dart';
 import '../core/utils/error_handler.dart';
 import 'core_providers.dart';
 
@@ -145,11 +146,11 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
   /// because GPS and saved farm city both failed.
   bool _usingDefaultLocation = false;
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool force = false}) async {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      await _fetchWeather();
+      await _fetchWeather(force: force);
     } catch (e) {
       state = state.copyWith(
         loading: false,
@@ -158,21 +159,25 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     }
   }
 
-  /// Resolve GPS location and fetch weather WITHOUT showing a loading spinner.
-  /// Used by the location button so only the location changes — the rest of
-  /// the UI stays responsive.
-  Future<void> refreshLocation() async {
+  /// Force GPS acquisition and fetch weather. Clears any cached/default
+  /// location so the user gets a live location reading.
+  Future<void> refreshWithGps() async {
+    state = state.copyWith(loading: true, error: null);
     try {
-      await _fetchWeather();
+      final storage = LocalStorage.instance;
+      storage.farmLat = null;
+      storage.farmLon = null;
+      await _fetchWeather(force: true);
     } catch (e) {
       state = state.copyWith(
+        loading: false,
         error: AppError.fromException(e),
       );
     }
   }
 
   /// Internal: resolve location + fetch forecast.  Does NOT toggle loading.
-  Future<void> _fetchWeather() async {
+  Future<void> _fetchWeather({bool force = false}) async {
     // Resolve location via LocationService (GPS -> geocoded city -> default).
     final resolved = await LocationService.instance.resolveLocation();
     _usingDefaultLocation = resolved.isDefault;
@@ -180,12 +185,13 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     final double lat = resolved.lat;
     final double lon = resolved.lon;
 
-    // Call backend forecast endpoint (includes current + 3-day + alerts)
+    // Call backend forecast endpoint (includes current + hourly + 3-day + alerts)
     final response = await _dio.get(
       '/api/weather/forecast',
       queryParameters: {
         'lat': lat,
         'lon': lon,
+        if (force) 'force': 'true',
       },
     );
 
@@ -201,6 +207,17 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     // Always prefer the human-readable label from LocationService
     // (e.g. "Lahore, Punjab") over raw coordinates from backend.
     final location = resolved.label;
+
+    // Parse hourly forecast
+    final hourlyList = (data['hourly'] as List?) ?? [];
+    final hourlyForecasts = hourlyList.map<HourlyForecast>((h) {
+      return HourlyForecast(
+        hour: h['hour']?.toString() ?? '',
+        temp: (h['temp'] as num?)?.round() ?? 0,
+        conditionIcon: _conditionToIcon(h['condition_icon']?.toString() ?? 'clear'),
+        rainChance: (h['rain_chance'] as num?)?.round() ?? 0,
+      );
+    }).toList();
 
     // Parse 3-day forecast
     final dailyList = (data['daily'] as List?) ?? [];
@@ -234,7 +251,7 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       condition: _mapCondition(description),
       conditionIcon: _conditionToIcon(description),
       loading: false,
-      hourlyForecast: const <HourlyForecast>[],
+      hourlyForecast: hourlyForecasts,
       dailyForecast: dailyForecasts,
       alerts: alertList,
     );
