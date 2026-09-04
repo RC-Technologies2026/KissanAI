@@ -10,6 +10,7 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv/
 env/
 ENV/
 *.egg
@@ -28,9 +29,10 @@ wheels/
 *.manifest
 *.spec
 
-# IDE
+# IDE & Tool configs
 .idea/
 .vscode/
+.qoder/
 *.swp
 *.swo
 *~
