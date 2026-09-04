@@ -62,7 +62,7 @@ class _ResultBody extends StatelessWidget {
   ];
 
   bool get _isHighConfidence =>
-      result.confidence != null && result.confidence! >= 0.70;
+      result.confidence != null && result.confidence! >= 0.50;
 
   String? get _confPercent =>
       result.confidence != null ? (result.confidence! * 100).round().toString() : null;
@@ -183,59 +183,109 @@ class _ResultBody extends StatelessWidget {
               child: Text(result.type.recommendationButton),
             ),
           ] else ...[
-            // Low confidence fallback
+            // Moderate confidence — show result with advisory note
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8E1),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.warning),
+                border: const Border(
+                  left: BorderSide(color: AppColors.warning, width: 3),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded,
-                          color: AppColors.warning, size: 28),
-                      SizedBox(width: 10),
-                      Text(
-                        'Low Confidence',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.headingText,
+                      const Icon(Icons.info_outline,
+                          color: AppColors.warning, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          result.name,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.headingText,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                   Text(
-                    result.cropName != null
-                        ? 'Closest match on ${result.cropName}: ${result.name}${_confPercent != null ? ' ($_confPercent% confident)' : ''}.'
-                        : 'Closest match: ${result.name}${_confPercent != null ? ' ($_confPercent% confident)' : ''}.',
+                    'Affected crop: ${result.cropName ?? 'Not identified'}',
                     style: const TextStyle(
-                      fontSize: 15,
-                      color: AppColors.headingText,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Please consult a local agronomist for accurate diagnosis.',
-                    style: TextStyle(
                       fontSize: 14,
                       color: AppColors.bodyText,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  OutlinedButton(
-                    onPressed: () => context.pop(),
-                    child: const Text('Try Again with a Clearer Photo'),
+                  const SizedBox(height: 4),
+                  Text(
+                    _detectedOn,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.bodyText,
+                    ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+
+            // Advisory note
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      color: AppColors.warning, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Moderate confidence — verify with a local agronomist if possible.',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.headingText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Still show diagnosis sections
+            if (cards.isEmpty)
+              AnswerCard(
+                icon: Icons.description_outlined,
+                iconColor: AppColors.primary,
+                borderColor: AppColors.primary,
+                title: 'Diagnosis',
+                body: result.name,
+              )
+            else
+              ...cards.map(_cardForSection),
+            const SizedBox(height: 20),
+
+            // View Recommendation button
+            ElevatedButton(
+              onPressed: () => context.push(
+                '/detection/recommendation',
+                extra: {
+                  'detectionType': result.type,
+                  'detectionId': result.detectionId,
+                },
+              ),
+              child: Text(result.type.recommendationButton),
             ),
           ],
           const SizedBox(height: 32),

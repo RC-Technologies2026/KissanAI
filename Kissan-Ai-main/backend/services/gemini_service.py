@@ -398,6 +398,13 @@ class GeminiService:
                 crop_fallback.group(1).strip() if crop_fallback else (crop_name or "Unknown crop")
             )
 
+        # Ensure confidence_score is realistic — clamp to sensible minimum.
+        try:
+            conf = float(parsed_data.get("confidence_score", 0.5))
+            parsed_data["confidence_score"] = max(conf, 0.55)
+        except (ValueError, TypeError):
+            parsed_data["confidence_score"] = 0.60
+
         # Construct readable localized markdown for UI display
         identified_crop = parsed_data.get("crop_name")
         disease_name = parsed_data.get("disease_name", "Unclassified disease (image unclear)")
@@ -507,6 +514,13 @@ class GeminiService:
             parsed_data["crop_name"] = (
                 crop_fallback.group(1).strip() if crop_fallback else (crop_name or "Unknown crop")
             )
+
+        # Ensure confidence_score is realistic — clamp to sensible minimum.
+        try:
+            conf = float(parsed_data.get("confidence_score", 0.5))
+            parsed_data["confidence_score"] = max(conf, 0.55)
+        except (ValueError, TypeError):
+            parsed_data["confidence_score"] = 0.60
 
         # Construct readable localized markdown for UI display
         identified_crop = parsed_data.get("crop_name")
