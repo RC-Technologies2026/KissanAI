@@ -20,7 +20,6 @@ async def recommend_insecticide(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Look up the pest detection ---
     result = await db.execute(
         select(PestDetection).where(PestDetection.id == body.pest_detection_id)
     )
@@ -30,12 +29,10 @@ async def recommend_insecticide(
     if detection.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    # --- 2. Get Rules Engine recommendation ---
     rule = get_insecticide_recommendation(detection.pest_category or detection.pest_name)
     if rule is None:
         rule = get_default_insecticide()
 
-    # --- 3. Check weather gate (if location provided) ---
     weather_blocked = False
     if body.lat is not None and body.lon is not None:
         location = f"{body.lat},{body.lon}"
@@ -49,7 +46,6 @@ async def recommend_insecticide(
         if weather:
             weather_blocked = not is_weather_safe(weather.rain_probability, weather.wind_speed)
 
-    # --- 4. Save recommendation to database ---
     recommendation = InsecticideRecommendation(
         pest_detection_id=detection.id,
         product_name=rule["product_name"],

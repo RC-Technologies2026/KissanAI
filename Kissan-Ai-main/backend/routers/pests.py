@@ -28,10 +28,8 @@ async def detect_pest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Determine requested language from Form field or Header
     selected_language = language or accept_language or "english"
 
-    # --- 1. Read and validate file size ---
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -39,26 +37,22 @@ async def detect_pest(
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
         )
 
-    # --- 2. Validate extension ---
     if not validate_extension(file.filename or ""):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    # --- 3. Validate content type ---
     content_type = file.content_type or "image/jpeg"
     if content_type not in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")
 
-    # --- 4. Validate magic bytes ---
     if not check_magic_bytes(contents[:16]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match a valid image format",
         )
 
-    # --- 5. Upload to Cloudinary (non-blocking) ---
     try:
         cloudinary_result = await asyncio.to_thread(
             uploader.upload_resource, contents, folder="kissanai/pest"
@@ -66,7 +60,6 @@ async def detect_pest(
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
-    # --- 6. Safely extract image_url & Save image record ---
     if isinstance(cloudinary_result, dict):
         image_url = cloudinary_result.get("secure_url") or cloudinary_result.get("url")
     else:
@@ -83,7 +76,6 @@ async def detect_pest(
     await db.commit()
     await db.refresh(image)
 
-    # --- 7. Structured Multi-Model Fallback Pest Identification in Requested Language ---
     try:
         result = await gemini_service.diagnose_pest_image(
             image_bytes=contents,
@@ -111,11 +103,7 @@ async def detect_pest(
             ),
         )
 
-    # --- 7b. Handle genuinely-unusable image fallback ---
     if isinstance(result, PestFallbackResponse):
-        # Image was too blurry / dark / no plant visible — ask farmer to retake.
-        # Return as a valid PestDetectionResponse so the frontend can render
-        # the low-confidence advisory UI instead of a raw server error.
         candidates = result.top_candidates or []
         extra = ""
         if candidates:
@@ -148,7 +136,6 @@ async def detect_pest(
     except (ValueError, TypeError):
         confidence_score = None
 
-    # --- 8. Save detection record to database ---
     detection = PestDetection(
         image_id=image.id,
         user_id=current_user.id,
@@ -160,7 +147,6 @@ async def detect_pest(
     db.add(detection)
     await db.flush()  # get detection.id before creating history
 
-    # --- 8b. Log to analysis history ---
     history_entry = AnalysisHistory(
         user_id=current_user.id,
         analysis_type="pest",
@@ -178,7 +164,6 @@ async def detect_pest(
     await db.commit()
     await db.refresh(detection)
 
-    # --- 9. Return response containing localized pest report & dynamic pest name ---
     return PestDetectionResponse(
         id=detection.id,
         image_id=image.id,

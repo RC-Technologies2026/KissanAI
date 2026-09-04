@@ -129,11 +129,9 @@ async def update_profile(
     current_user: User = Depends(get_current_user),
 ):
     """Update user profile (name, phone, language, farm details)."""
-    # Update fields if provided
     if body.full_name is not None:
         current_user.full_name = body.full_name
     if body.phone is not None:
-        # Check if phone is already used by another user
         if body.phone:
             result = await db.execute(select(User).where(User.phone == body.phone, User.id != current_user.id))
             if result.scalar_one_or_none():
@@ -171,16 +169,13 @@ async def upload_profile_image(
     current_user: User = Depends(get_current_user),
 ):
     """Upload profile image to Cloudinary."""
-    # Validate file type
     if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are allowed.")
     
-    # Read file
     contents = await file.read()
     if len(contents) > 5 * 1024 * 1024:  # 5MB limit
         raise HTTPException(status_code=413, detail="File too large. Maximum size is 5MB")
     
-    # Upload to Cloudinary
     try:
         result = await asyncio.to_thread(
             cloudinary_uploader.upload,
@@ -192,7 +187,6 @@ async def upload_profile_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
     
-    # Update user's profile_image_url
     current_user.profile_image_url = image_url
     await db.commit()
     await db.refresh(current_user)

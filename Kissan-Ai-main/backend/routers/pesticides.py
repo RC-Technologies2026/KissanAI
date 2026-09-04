@@ -20,7 +20,6 @@ async def recommend_pesticide(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Look up the disease detection ---
     result = await db.execute(
         select(DiseaseDetection).where(DiseaseDetection.id == body.disease_detection_id)
     )
@@ -30,7 +29,6 @@ async def recommend_pesticide(
     if detection.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    # --- 2. Get Rules Engine recommendation ---
     # Prefer the fixed English category (set by Gemini alongside the
     # localized disease_name) since disease_name may be translated/free-form
     # and won't reliably match the rules engine's fixed keys. Fall back to
@@ -39,7 +37,6 @@ async def recommend_pesticide(
     if rule is None:
         rule = get_default_pesticide()
 
-    # --- 3. Check weather gate (if location provided) ---
     weather_blocked = False
     if body.lat is not None and body.lon is not None:
         location = f"{body.lat},{body.lon}"
@@ -53,7 +50,6 @@ async def recommend_pesticide(
         if weather:
             weather_blocked = not is_weather_safe(weather.rain_probability, weather.wind_speed)
 
-    # --- 4. Save recommendation to database ---
     recommendation = PesticideRecommendation(
         disease_detection_id=detection.id,
         product_name=rule["product_name"],

@@ -33,7 +33,6 @@ async def recommend_crops(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Look up the plot ---
     result = await db.execute(select(Plot).where(Plot.id == body.plot_id))
     plot = result.scalar_one_or_none()
     if not plot:
@@ -41,7 +40,6 @@ async def recommend_crops(
     if plot.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    # --- 2. Get crop recommendation from Rules Engine ---
     # Use soil type from the request if the farmer picked one on this
     # screen, otherwise fall back to the plot's saved soil type. Season and
     # water availability come only from the request. Pass plot area / GPS
@@ -57,7 +55,6 @@ async def recommend_crops(
     )
     recommended_crops_str = ", ".join(crops)
 
-    # --- 3. Save crop recommendation ---
     crop_rec = CropRecommendation(
         plot_id=plot.id,
         recommended_crops=recommended_crops_str,
@@ -66,7 +63,6 @@ async def recommend_crops(
     db.add(crop_rec)
     await db.flush()  # get crop_rec.id before creating irrigation
 
-    # --- 4. Generate guidance for top recommended crop ---
     top_crop = crops[0] if crops else "vegetables"
     irrigation_data = get_irrigation_guidance(top_crop, water_availability=body.water_availability)
     fertilizer_advice = get_fertilizer_guidance(top_crop)
@@ -91,7 +87,6 @@ async def recommend_crops(
         enriched_reasoning_parts.append(irrigation_data["note"])
     crop_rec.reasoning = " ".join(enriched_reasoning_parts)
 
-    # --- 5. Log to ANALYSIS_HISTORY ---
     history_entry = AnalysisHistory(
         user_id=current_user.id,
         analysis_type="crop",
@@ -123,7 +118,6 @@ async def get_irrigation_guide(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Look up the crop recommendation ---
     result = await db.execute(
         select(IrrigationGuidance).where(
             IrrigationGuidance.crop_recommendation_id == crop_recommendation_id
@@ -133,7 +127,6 @@ async def get_irrigation_guide(
     if not guidance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Irrigation guide not found")
 
-    # --- 2. Verify ownership through plot ---
     crop_result = await db.execute(
         select(CropRecommendation).where(CropRecommendation.id == crop_recommendation_id)
     )
@@ -157,7 +150,6 @@ async def direct_irrigation_guide(
     Standalone irrigation guide for a selected plot + crop.
     Works like crop recommendation but focused only on irrigation scheduling.
     """
-    # --- 1. Look up the plot ---
     result = await db.execute(select(Plot).where(Plot.id == body.plot_id))
     plot = result.scalar_one_or_none()
     if not plot:
@@ -167,7 +159,6 @@ async def direct_irrigation_guide(
 
     crop_name = body.crop_name.strip()
 
-    # --- 2. Parse planting_date and last_watered ---
     crop_age_days = None
     days_since_watered = None
     today = date.today()
@@ -190,7 +181,6 @@ async def direct_irrigation_guide(
         except (ValueError, TypeError):
             pass
 
-    # --- 3. Generate guidance from rules engine ---
     irrigation_data = get_irrigation_guidance(crop_name, water_availability=body.water_availability)
     fertilizer = get_fertilizer_guidance(crop_name)
     pest_alerts = get_pest_disease_alerts(crop_name)
@@ -256,7 +246,6 @@ async def direct_irrigation_guide(
                 else:
                     personalized_note = crop_age_info
 
-    # --- 4. Log to ANALYSIS_HISTORY ---
     history_entry = AnalysisHistory(
         user_id=current_user.id,
         analysis_type="irrigation",

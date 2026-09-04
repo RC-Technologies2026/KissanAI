@@ -41,7 +41,6 @@ async def upload_image(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- File size validation ---
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -49,7 +48,6 @@ async def upload_image(
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
         )
 
-    # --- File extension validation ---
     filename = (file.filename or "").lower()
     ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
@@ -58,21 +56,19 @@ async def upload_image(
             detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    # --- Content-type validation ---
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid content type",
         )
 
-    # --- Magic bytes validation (don't trust extension alone) ---
+    # Magic bytes validation — don't trust extension alone
     if not _check_magic_bytes(contents[:16]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match a valid image format",
         )
 
-    # --- Upload to Cloudinary (non-blocking) ---
     try:
         result = await asyncio.to_thread(
             uploader.upload_resource, contents, folder="kissanai"
@@ -83,7 +79,6 @@ async def upload_image(
             detail="Image upload failed",
         )
 
-    # --- Safe extraction of image URL and public_id ---
     if isinstance(result, dict):
         image_url = result.get("secure_url") or result.get("url")
         public_id = result.get("public_id")
@@ -97,7 +92,6 @@ async def upload_image(
             image_url = getattr(result, "secure_url", None) or getattr(result, "url", str(result))
         public_id = getattr(result, "public_id", None)
 
-    # --- Save to database ---
     image = Image(
         user_id=current_user.id,
         image_url=image_url,

@@ -23,7 +23,6 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # --- 1. Call Gemini API with a focused agricultural prompt ---
     try:
         prompt = CHAT_USER_PROMPT_TEMPLATE.format(message=body.message)
         # Chat uses a short timeout (10s) — farmers expect instant answers.
@@ -39,7 +38,6 @@ async def chat(
             detail=f"Gemini API error: {str(e)}",
         )
 
-    # --- 2. Save to CHAT_HISTORY ---
     chat_entry = ChatHistory(
         user_id=current_user.id,
         message=body.message,

@@ -28,10 +28,8 @@ async def detect_disease(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Determine requested language from Form or Header
     selected_language = language or accept_language or "english"
 
-    # --- 1. Read and validate file size ---
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -39,7 +37,6 @@ async def detect_disease(
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
         )
 
-    # --- 2. Validate extension & content type ---
     if not validate_extension(file.filename or ""):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -50,14 +47,12 @@ async def detect_disease(
     if content_type not in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")
 
-    # --- 3. Validate magic bytes ---
     if not check_magic_bytes(contents[:16]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match a valid image format",
         )
 
-    # --- 4. Upload to Cloudinary (non-blocking) ---
     try:
         cloudinary_result = await asyncio.to_thread(
             uploader.upload_resource, contents, folder="kissanai/disease"
@@ -65,7 +60,6 @@ async def detect_disease(
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
-    # --- 5. Safely extract image_url & Save image record ---
     if isinstance(cloudinary_result, dict):
         image_url = cloudinary_result.get("secure_url") or cloudinary_result.get("url")
     else:
@@ -82,7 +76,6 @@ async def detect_disease(
     await db.commit()
     await db.refresh(image)
 
-    # --- 6. Structured Multi-Model Fallback Leaf Diagnosis in Requested Language ---
     try:
         result = await gemini_service.diagnose_leaf_image(
             image_bytes=contents,
@@ -110,11 +103,7 @@ async def detect_disease(
             ),
         )
 
-    # --- 6b. Handle genuinely-unusable image fallback ---
     if isinstance(result, DiseaseFallbackResponse):
-        # Image was too blurry / dark / no plant visible — ask farmer to retake.
-        # Return as a valid DiseaseDetectionResponse so the frontend can render
-        # the low-confidence advisory UI instead of a raw server error.
         candidates = result.top_candidates or []
         extra = ""
         if candidates:
@@ -147,7 +136,6 @@ async def detect_disease(
     except (ValueError, TypeError):
         confidence_score = None
 
-    # --- 7. Save detection record to database ---
     detection = DiseaseDetection(
         image_id=image.id,
         user_id=current_user.id,
@@ -159,7 +147,6 @@ async def detect_disease(
     db.add(detection)
     await db.flush()  # get detection.id before creating history
 
-    # --- 7b. Log to analysis history ---
     history_entry = AnalysisHistory(
         user_id=current_user.id,
         analysis_type="disease",
@@ -177,7 +164,6 @@ async def detect_disease(
     await db.commit()
     await db.refresh(detection)
 
-    # --- 8. Return response containing localized diagnosis & dynamic disease name ---
     return DiseaseDetectionResponse(
         id=detection.id,
         image_id=image.id,
