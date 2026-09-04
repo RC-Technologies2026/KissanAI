@@ -203,25 +203,27 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
 
 # Valid Gemini model names (verified as of Sep 2026).
 # gemini-2.5-flash is retired (404 NOT_FOUND for new users).
-# 3.5-flash is the most reliable; flash-lite times out frequently.
+# Order: most reliable first, with backups for high-demand situations.
 models_to_try = [
     "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
     "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
 ]
 
-# Chat-only model list — 3.5 models for text Q&A (2.5-flash retired for new users).
+# Chat-only model list — optimized for speed + reliability.
+# 3.5-flash first (fastest), 3.6-flash backup, flash-lite last resort.
 chat_models_to_try = [
     "gemini-3.5-flash",
-    "gemini-3.6-flash",  # backup — prevents 502 when 3.5-flash times out
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID). 3.5-flash is fastest; 3.6-flash and flash-lite as backups.
+# crop ID). All three models for maximum reliability under load.
 vision_models_to_try = [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",  # third backup — more reliable under load
+    "gemini-3.5-flash-lite",
 ]
 
 
@@ -437,7 +439,7 @@ class GeminiService:
         # with a shorter timeout so responses feel instant.
         if models_list is None:
             models_list = chat_models_to_try
-            timeout = min(timeout, 20.0)  # 20s — enough for cold start + API call
+            timeout = min(timeout, 30.0)  # 30s — handles cold start + high demand
         text, _ = await self.generate_content_with_fallback(
             contents=message,
             models_list=models_list,
