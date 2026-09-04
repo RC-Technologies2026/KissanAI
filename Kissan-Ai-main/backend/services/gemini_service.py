@@ -217,10 +217,11 @@ chat_models_to_try = [
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID). 3.5-flash is fastest and most reliable; flash-lite times out.
+# crop ID). 3.5-flash is fastest; 3.6-flash and flash-lite as backups.
 vision_models_to_try = [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",  # third backup — more reliable under load
 ]
 
 
@@ -405,8 +406,9 @@ class GeminiService:
                         je = json.JSONDecodeError("No valid JSON object found", text, 0)
                         last_exception = je
                         logger.warning(
-                            "Model %s returned invalid JSON, falling back to next model...",
+                            "Model %s returned invalid JSON, falling back to next model... Response preview: %s",
                             model,
+                            text[:200] if text else "(empty)",
                         )
                         continue  # try next model
 
