@@ -83,14 +83,14 @@ class WeatherState {
   final List<DailyForecast> dailyForecast;
   final List<String> alerts;
 
-  bool get isBlocked => rainProbability > 60 || windSpeedKmh > 15;
+  bool get isBlocked => rainProbability > 50 || windSpeedKmh > 18;
 
   String? get alertMessage {
     if (!isBlocked) return null;
-    if (windSpeedKmh > 15) {
+    if (windSpeedKmh > 18) {
       return 'High wind — spraying not recommended today';
     }
-    return 'Rain expected — irrigation may not be needed today';
+    return 'Rain likely — irrigation may not be needed today';
   }
 
   WeatherState copyWith({

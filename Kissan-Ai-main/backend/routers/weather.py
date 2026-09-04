@@ -102,16 +102,18 @@ async def get_current_weather(
     rain_data = owm.get("rain", {})
     rain_1h = rain_data.get("1h", 0)
     if rain_1h > 0:
-        rain_probability = min(rain_1h / 10.0 * 100, 100)
+        rain_probability = min(rain_1h / 10.0 * 100, 80)
     else:
-        # Use weather description to estimate probability
+        # Use weather description to estimate probability (capped at 75%)
         desc_lower = description.lower()
         if "thunder" in desc_lower or "storm" in desc_lower:
-            rain_probability = 80.0
-        elif "heavy rain" in desc_lower or "rain" in desc_lower:
+            rain_probability = 75.0
+        elif "heavy rain" in desc_lower:
             rain_probability = 70.0
+        elif "rain" in desc_lower:
+            rain_probability = 55.0
         elif "drizzle" in desc_lower or "light rain" in desc_lower:
-            rain_probability = 50.0
+            rain_probability = 45.0
         elif "shower" in desc_lower:
             rain_probability = 40.0
         elif "cloud" in desc_lower or "overcast" in desc_lower:
@@ -237,9 +239,9 @@ async def get_weather_forecast(
         conditions = [e["weather"][0]["description"] for e in entries]
         rain_probs = []
         for e in entries:
-            # Use OWM's 'pop' (probability of precipitation, 0-1) if available
+            # Use OWM's 'pop' (probability of precipitation, 0-1)
             pop = e.get("pop", 0)
-            rain_probs.append(round(pop * 100))
+            rain_probs.append(pop * 100)
 
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         day_name = day_names.get(dt.strftime("%a"), dt.strftime("%a"))
@@ -248,43 +250,68 @@ async def get_weather_forecast(
         from collections import Counter
         most_common_cond = Counter(conditions).most_common(1)[0][0] if conditions else "clear"
 
+        # Use weighted rain chance: 70th percentile (realistic, not extreme max)
+        rain_probs_sorted = sorted(rain_probs)
+        if rain_probs_sorted:
+            idx = int(len(rain_probs_sorted) * 0.7)
+            daily_rain_chance = min(round(rain_probs_sorted[min(idx, len(rain_probs_sorted)-1)]), 80)
+        else:
+            daily_rain_chance = 0
+
         daily_forecasts.append(DailyForecastItem(
             day=day_name,
             high=round(max(temps)),
             low=round(min(temps)),
             condition=most_common_cond.title(),
             condition_icon=most_common_cond,
-            rain_chance=round(max(rain_probs)) if rain_probs else 0,
+            rain_chance=daily_rain_chance,
             humidity=round(sum(humidities) / len(humidities)) if humidities else 65,
             wind_speed=round(max(winds)) if winds else 0,
         ))
 
-    # --- 5. Generate agricultural alerts ---
+    # --- 5. Generate agricultural alerts (max 1 per day, combined) ---
     alerts: list[str] = []
+    day_alerts: dict[str, list[str]] = {}  # day -> list of issues
 
-    # Check all 3 days for extreme conditions
     for fc in daily_forecasts:
-        if fc.rain_chance > 30:
-            alerts.append(f"{fc.day}: Rain expected ({fc.rain_chance}% chance) — avoid spraying pesticides")
-        if fc.wind_speed > 12:
-            alerts.append(f"{fc.day}: Strong winds ({fc.wind_speed} km/h) — do not spray crops")
-        if fc.high > 40:
-            alerts.append(f"{fc.day}: Extreme heat ({fc.high}°C) — irrigate crops in early morning")
-        if fc.low < 5:
-            alerts.append(f"{fc.day}: Frost risk ({fc.low}°C) — protect sensitive crops")
-        if fc.high > 36 and fc.humidity < 30:
-            alerts.append(f"{fc.day}: Hot and dry — increase irrigation frequency")
-        if fc.humidity > 70 and fc.high > 30:
-            alerts.append(f"{fc.day}: High humidity & heat — watch for fungal diseases")
+        issues: list[str] = []
+        if fc.rain_chance >= 40:
+            issues.append(f"rain expected ({fc.rain_chance}%)")
+        if fc.wind_speed >= 20:
+            issues.append(f"strong winds ({fc.wind_speed} km/h)")
+        if fc.high >= 42:
+            issues.append(f"extreme heat ({fc.high}°C)")
+        elif fc.high >= 38 and fc.humidity < 25:
+            issues.append(f"hot & dry ({fc.high}°C, {fc.humidity}% humidity)")
+        if fc.low <= 4:
+            issues.append(f"frost risk ({fc.low}°C)")
+        if fc.humidity >= 75 and fc.high >= 28:
+            issues.append(f"high humidity — fungal disease risk")
 
-    # Check current conditions
-    if current.wind_speed > 12:
+        if issues:
+            day_alerts[fc.day] = issues
+
+    # Build one combined alert per day
+    for day, issues in day_alerts.items():
+        combined = "; ".join(issues)
+        if "rain" in combined:
+            alerts.append(f"{day}: {combined.capitalize()} — avoid spraying pesticides")
+        elif "heat" in combined or "dry" in combined:
+            alerts.append(f"{day}: {combined.capitalize()} — irrigate in early morning")
+        elif "frost" in combined:
+            alerts.append(f"{day}: {combined.capitalize()} — protect sensitive crops")
+        elif "wind" in combined:
+            alerts.append(f"{day}: {combined.capitalize()} — do not spray crops")
+        else:
+            alerts.append(f"{day}: {combined.capitalize()}")
+
+    # Current conditions
+    if current.wind_speed >= 20:
         alerts.insert(0, "Today: High wind — spraying not recommended")
-    if current.rain_probability > 30:
-        alerts.insert(0, "Today: Rain expected — irrigation may not be needed")
+    if current.rain_probability >= 40:
+        alerts.insert(0, "Today: Rain likely — hold off on irrigation")
 
-    # Limit to top 5 alerts
-    alerts = alerts[:5]
+    alerts = alerts[:4]
 
     result = WeatherForecastResponse(
         location=location,
