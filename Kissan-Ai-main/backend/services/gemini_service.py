@@ -138,13 +138,12 @@ chat_models_to_try = [
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID) needs models that handle JSON schemas well.
-# gemini-2.5-flash is the most reliable; 3.5 models are tried as fallbacks
-# but may return 503 during high demand.
+# crop ID). 3.5-flash-lite is fastest for structured JSON output; 2.5-flash
+# is the final fallback when 3.5 models are unavailable.
 vision_models_to_try = [
-    "gemini-2.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
+    "gemini-2.5-flash",
 ]
 
 
