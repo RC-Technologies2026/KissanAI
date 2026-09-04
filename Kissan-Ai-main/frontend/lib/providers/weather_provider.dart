@@ -198,7 +198,9 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     final rainProb = (current['rain_probability'] as num?)?.round() ?? 20;
     final windSpeed = (current['wind_speed'] as num?)?.round() ?? 8;
     final description = current['description'] as String? ?? 'Clear';
-    final location = current['location'] as String? ?? resolved.label;
+    // Always prefer the human-readable label from LocationService
+    // (e.g. "Lahore, Punjab") over raw coordinates from backend.
+    final location = resolved.label;
 
     // Parse 3-day forecast
     final dailyList = (data['daily'] as List?) ?? [];

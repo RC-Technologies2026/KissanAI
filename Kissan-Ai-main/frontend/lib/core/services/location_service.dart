@@ -104,23 +104,27 @@ class LocationService {
         timeLimit: const Duration(seconds: 15),
       );
 
-      // Reverse-geocode to get a human-readable label
+      // Reverse-geocode to get a human-readable label (with retry)
       String label = '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
-      try {
-        final placemarks = await geo.placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          final city = p.locality ?? p.subAdministrativeArea ?? '';
-          final province = p.administrativeArea ?? '';
-          if (city.isNotEmpty) {
-            label = province.isNotEmpty ? '$city, $province' : city;
+      for (int attempt = 0; attempt < 2; attempt++) {
+        try {
+          final placemarks = await geo.placemarkFromCoordinates(
+            position.latitude,
+            position.longitude,
+          );
+          if (placemarks.isNotEmpty) {
+            final p = placemarks.first;
+            final city = p.locality ?? p.subAdministrativeArea ?? '';
+            final province = p.administrativeArea ?? '';
+            if (city.isNotEmpty) {
+              label = province.isNotEmpty ? '$city, $province' : city;
+              break;
+            }
           }
+        } catch (e) {
+          debugPrint('Reverse geocoding attempt ${attempt + 1} failed: $e');
+          if (attempt == 0) await Future.delayed(const Duration(seconds: 2));
         }
-      } catch (e) {
-        debugPrint('Reverse geocoding failed: $e');
       }
 
       // Persist
