@@ -203,26 +203,24 @@ class _PlantDiagnosisStructuredResponse(BaseModel):
 
 # Valid Gemini model names (verified as of Sep 2026).
 # gemini-2.5-flash is retired (404 NOT_FOUND for new users).
-# gemini-3.6-flash is the current recommended replacement.
+# 3.5 models are prioritized; 3.6 is fallback.
 models_to_try = [
-    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
+    "gemini-3.6-flash",
 ]
 
 # Chat-only model list — use the absolute fastest model for text Q&A.
-# Chat responses should feel instant (< 5 s), so we skip heavier models.
 chat_models_to_try = [
-    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
 ]
 
 # Vision / structured-output model list — image analysis (disease, pest,
-# crop ID). gemini-3.6-flash is the current recommended model; 3.5 models
-# may return 403 on free-tier API keys.
+# crop ID). 3.5 models are prioritized; 3.6 is fallback.
 vision_models_to_try = [
-    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
+    "gemini-3.6-flash",
 ]
 
 
