@@ -1,7 +1,7 @@
 # Environment files - NEVER commit real keys
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -46,11 +46,21 @@ htmlcov/
 *.log
 logs/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Flutter/Dart build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
 
-# OS
-Thumbs.db
-.DS_Store
+# Android build
+**/android/.gradle/
+**/android/.kotlin/
+**/android/local.properties
+**/android/**/build/
+**/android/**/.externalNativeBuild/
+
+# Generated plugin registrations
+.flutter-plugins-dependencies
