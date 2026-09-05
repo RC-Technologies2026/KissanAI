@@ -58,21 +58,6 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                 ? null
                 : () => ref.read(weatherProvider.notifier).refreshWithGps(),
           ),
-          // Refresh button
-          IconButton(
-            icon: isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.primary),
-                  )
-                : const Icon(Icons.refresh, color: AppColors.primary),
-            tooltip: 'Refresh weather',
-            onPressed: isLoading
-                ? null
-                : () => ref.read(weatherProvider.notifier).refresh(force: true),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -374,12 +359,12 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                   itemBuilder: (_, i) {
                     final h = weather.hourlyForecast[i];
                     return Container(
-                      width: 72,
+                      width: 78,
                       margin: EdgeInsets.only(
                           right:
                               i < weather.hourlyForecast.length - 1 ? 8 : 0),
                       padding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 8),
+                          vertical: 12, horizontal: 6),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(16),
@@ -391,7 +376,7 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                           Text(
                             h.hour,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: AppColors.bodyText,
                             ),
@@ -461,13 +446,13 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                               SizedBox(
                                 width: 60,
                                 child: Text(
-                                  d.day,
+                                  i == 0 ? lang.t('weather.today') : d.day,
                                   style: TextStyle(
                                     fontSize: 15,
-                                    fontWeight: d.day == lang.t('weather.today')
+                                    fontWeight: i == 0
                                         ? FontWeight.w700
                                         : FontWeight.w500,
-                                    color: d.day == lang.t('weather.today')
+                                    color: i == 0
                                         ? AppColors.primary
                                         : AppColors.headingText,
                                   ),

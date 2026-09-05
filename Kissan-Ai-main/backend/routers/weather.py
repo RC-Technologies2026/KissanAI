@@ -18,6 +18,9 @@ logger = logging.getLogger("kissanai.weather")
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
 
+# Pakistan Standard Time (UTC+5) — used for all user-facing forecasts
+PKT = timezone(timedelta(hours=5))
+
 CACHE_TTL = 900  # 15 minutes in seconds
 OPENWEATHERMAP_KEY = os.getenv("OPENWEATHERMAP_KEY", "")
 OPENWEATHERMAP_URL = "https://api.openweathermap.org/data/2.5/weather"
@@ -216,15 +219,19 @@ async def get_weather_forecast(
             detail="Forecast service unavailable",
         )
 
-    # Build hourly forecast from the next 8 x 3-hour entries
+    # Build hourly forecast from the next 8 x 3-hour entries starting from now
+    # OWM returns dt in UTC; convert to Pakistan local time (UTC+5) for display
     hourly_forecasts: list[dict] = []
     for item in owm.get("list", [])[:8]:
-        dt = datetime.fromtimestamp(item["dt"])
+        dt_utc = datetime.fromtimestamp(item["dt"], tz=timezone.utc)
+        dt = dt_utc.astimezone(PKT)
         # Cap rain chance at 80% — OWM sometimes returns 1.0 (100%) unrealistically
         raw_pop = item.get("pop", 0)
         rain_chance = min(round(raw_pop * 100), 80)
+        # Format hour as 12-hour with AM/PM
+        hour_12 = dt.strftime("%I %p").lstrip("0")
         hourly_forecasts.append({
-            "hour": dt.strftime("%I %p"),
+            "hour": hour_12,
             "temp": round(item["main"]["temp"]),
             "condition_icon": item["weather"][0]["description"],
             "rain_chance": rain_chance,
@@ -241,16 +248,18 @@ async def get_weather_forecast(
     )
 
     # --- 4. Aggregate 3-hour data into daily ---
+    # Convert UTC timestamps to Pakistan local date for correct day grouping
     daily_map: dict[str, list] = {}  # date_str -> list of 3-hour entries
     for item in owm.get("list", []):
-        dt = datetime.fromtimestamp(item["dt"])
+        dt_utc = datetime.fromtimestamp(item["dt"], tz=timezone.utc)
+        dt = dt_utc.astimezone(PKT)
         date_str = dt.strftime("%Y-%m-%d")
         if date_str not in daily_map:
             daily_map[date_str] = []
         daily_map[date_str].append(item)
 
     # Build 3-day forecast (skip today, take next 3 days)
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now(PKT).strftime("%Y-%m-%d")
     sorted_dates = sorted(daily_map.keys())
     future_dates = [d for d in sorted_dates if d > today_str][:3]
 
@@ -270,7 +279,7 @@ async def get_weather_forecast(
             pop = e.get("pop", 0)
             rain_probs.append(pop * 100)
 
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=PKT)
         day_name = day_names.get(dt.strftime("%a"), dt.strftime("%a"))
 
         # Most common condition

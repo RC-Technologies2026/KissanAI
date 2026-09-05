@@ -59,9 +59,10 @@ vision_models_to_try = [
     "gemini-3.5-flash",
 ]
 
-# Groq vision model — confirmed working vision model on Groq API
-# Using llama-4-maverick for vision (scout is text-only on some Groq tiers)
-groq_vision_model = "meta-llama/llama-4-maverick-17b-128e-instruct"
+# Groq vision model — disabled due to 404 (model name deprecated on Groq API)
+# Re-enable by setting use_groq_first=True in _generate_with_fallback calls
+# and updating the model name to a currently available Groq vision model.
+groq_vision_model = "meta-llama/llama-4-maverick-17b-128e-instruct"  # DEPRECATED — returns 404
 
 # Tracks which models have hit RESOURCE_EXHAUSTED today.
 # TTL reduced to 30 min so service recovers faster after quota resets.
@@ -533,7 +534,7 @@ class GeminiService:
             raw, model_used = await _generate_with_fallback(
                 contents, models, timeout,
                 validate_json=True,
-                use_groq_first=True,
+                use_groq_first=False,  # Groq disabled — model returns 404
             )
             parsed = json.loads(raw)
             logger.info("Disease diagnosis succeeded with model %s", model_used)
@@ -595,7 +596,7 @@ class GeminiService:
             raw, model_used = await _generate_with_fallback(
                 contents, models, timeout,
                 validate_json=True,
-                use_groq_first=True,
+                use_groq_first=False,  # Groq disabled — model returns 404
             )
             parsed = json.loads(raw)
             logger.info("Pest diagnosis succeeded with model %s", model_used)
@@ -655,7 +656,7 @@ class GeminiService:
             raw, model_used = await _generate_with_fallback(
                 contents, models, timeout,
                 validate_json=True,
-                use_groq_first=True,
+                use_groq_first=False,  # Groq disabled — model returns 404
             )
             parsed = json.loads(raw)
             logger.info("Plant diagnosis succeeded with model %s", model_used)

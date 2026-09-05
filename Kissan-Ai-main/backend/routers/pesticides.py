@@ -8,7 +8,7 @@ from models.weather_cache import WeatherCache
 from models.user import User
 from schemas.pesticide import PesticideRecommendationRequest, PesticideRecommendationResponse, PesticideProduct
 from auth.utils import get_current_user
-from rules_engine.pesticide_rules import get_pesticide_recommendation, get_default_pesticide
+from rules_engine.pesticide_rules import get_pesticide_recommendation, get_default_pesticide, PESTICIDE_RULES
 from rules_engine.weather_gate import is_weather_safe
 
 router = APIRouter(prefix="/api/pesticides", tags=["pesticides"])
@@ -33,7 +33,31 @@ async def recommend_pesticide(
     # localized disease_name) since disease_name may be translated/free-form
     # and won't reliably match the rules engine's fixed keys. Fall back to
     # disease_name for older rows saved before disease_category existed.
-    products = get_pesticide_recommendation(detection.disease_category or detection.disease_name)
+    #
+    # The AI returns disease_category as generic values ("fungal", "bacterial")
+    # which never match the specific disease keys in PESTICIDE_RULES.
+    # So we normalize disease_name to snake_case and try matching that first.
+    products = None
+
+    # Strategy 1: normalize disease_name to snake_case (e.g. "Leaf Rust" -> "leaf_rust")
+    if detection.disease_name:
+        normalized = detection.disease_name.lower().strip()
+        # Remove common prefixes/suffixes that AI adds
+        for prefix in ["leaf ", "stem ", "root ", "fruit "]:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):]
+        normalized = normalized.replace(" ", "_").replace("-", "_").replace("'", "").replace("/", "_")
+        products = get_pesticide_recommendation(normalized)
+
+    # Strategy 2: try disease_category (may be generic like "fungal" — rarely matches)
+    if not products and detection.disease_category:
+        products = get_pesticide_recommendation(detection.disease_category)
+
+    # Strategy 3: try disease_name as-is (for older rows)
+    if not products and detection.disease_name:
+        products = get_pesticide_recommendation(detection.disease_name.lower().replace(" ", "_"))
+
+    # Strategy 4: fallback to default broad-spectrum products
     if not products:
         products = get_default_pesticide()
 
