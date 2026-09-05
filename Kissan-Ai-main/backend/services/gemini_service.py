@@ -46,29 +46,22 @@ else:
     logger.info("GEMINI_API_KEY loaded (length=%d)", len(GEMINI_API_KEY))
 
 # ---------------------------------------------------------------------------
-# Model pools.
-# For chat: Groq fallback handles failures automatically.
-# For vision: Groq is PRIMARY (free, no quota, confirmed on Render).
-#   Gemini models listed as fallback — update these if you find which model
-#   your API key supports by checking: https://generativelanguage.googleapis.com/v1beta/models
+# Model pools — confirmed by Gemini API error: "use models/gemini-3.5-flash-lite"
 # ---------------------------------------------------------------------------
 chat_models_to_try = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
 ]
 
-# NOTE: Groq is tried FIRST for vision (use_groq_first=True in diagnose_* methods)
-# These Gemini models are only tried if Groq fails
+# Groq is tried FIRST for vision. Gemini models are fallback only.
 vision_models_to_try = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
 ]
 
-# Groq vision model — primary for disease/pest (vision-capable, free tier)
-meta_vision_model = "meta-llama/llama-4-scout-17b-16e-instruct"
-groq_vision_model = meta_vision_model
+# Groq vision model — confirmed working vision model on Groq API
+# Using llama-4-maverick for vision (scout is text-only on some Groq tiers)
+groq_vision_model = "meta-llama/llama-4-maverick-17b-128e-instruct"
 
 # Tracks which models have hit RESOURCE_EXHAUSTED today.
 # TTL reduced to 30 min so service recovers faster after quota resets.

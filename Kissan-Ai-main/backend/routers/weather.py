@@ -61,6 +61,7 @@ async def get_current_weather(
         return WeatherResponse(
             location=location,
             temperature=data["temperature"],
+            feels_like=data.get("feels_like"),
             humidity=data["humidity"],
             rain_probability=data["rain_probability"],
             wind_speed=data["wind_speed"],
@@ -95,6 +96,7 @@ async def get_current_weather(
 
     # --- 3. Parse OpenWeatherMap response ---
     temperature = owm["main"]["temp"]
+    feels_like = owm["main"].get("feels_like", temperature)
     humidity = owm["main"]["humidity"]
     wind_speed = owm["wind"]["speed"]
     description = owm["weather"][0]["description"]
@@ -124,6 +126,7 @@ async def get_current_weather(
 
     weather_data = {
         "temperature": temperature,
+        "feels_like": feels_like,
         "humidity": humidity,
         "rain_probability": rain_probability,
         "wind_speed": wind_speed,
@@ -150,6 +153,7 @@ async def get_current_weather(
     return WeatherResponse(
         location=location,
         temperature=temperature,
+        feels_like=feels_like,
         humidity=humidity,
         rain_probability=rain_probability,
         wind_speed=wind_speed,

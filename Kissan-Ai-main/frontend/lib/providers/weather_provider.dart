@@ -199,6 +199,7 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     // Parse current weather from forecast response
     final current = data['current'] ?? data;
     final temperature = (current['temperature'] as num?)?.round() ?? 32;
+    final feelsLike = (current['feels_like'] as num?)?.round() ?? (temperature + 3);
     final humidity = (current['humidity'] as num?)?.round() ?? 65;
     final rainProb = (current['rain_probability'] as num?)?.round() ?? 20;
     final windSpeed = (current['wind_speed'] as num?)?.round() ?? 8;
@@ -238,7 +239,7 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
     state = WeatherState(
       temperatureC: temperature,
-      feelsLike: temperature + 3,
+      feelsLike: feelsLike,
       rainProbability: rainProb,
       windSpeedKmh: windSpeed,
       humidity: humidity,

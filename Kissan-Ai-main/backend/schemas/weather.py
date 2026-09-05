@@ -6,6 +6,7 @@ from typing import Optional, List
 class WeatherResponse(BaseModel):
     location: str
     temperature: float
+    feels_like: Optional[float] = None
     humidity: float
     rain_probability: float
     wind_speed: float
