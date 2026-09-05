@@ -81,7 +81,7 @@ async def detect_disease(
             image_bytes=contents,
             mime_type=content_type,
             language=selected_language,
-            timeout=45.0,
+            timeout=25.0,
             crop_name=crop_name,
         )
     except Exception as gemini_err:

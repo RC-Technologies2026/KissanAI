@@ -47,8 +47,6 @@ chat_models_to_try = [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
     "gemini-3.7-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
 ]
 
 vision_models_to_try = [
@@ -403,7 +401,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
@@ -428,7 +426,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
@@ -452,7 +450,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
