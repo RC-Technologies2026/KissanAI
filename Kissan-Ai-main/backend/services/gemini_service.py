@@ -297,26 +297,49 @@ async def _call_gemini_vision(model: str, contents: list, timeout: float) -> str
 
 
 async def _call_groq_vision(contents: list, timeout: float) -> str:
-    """Call Groq for vision tasks (OpenAI-compatible API)."""
+    """Call Groq for vision tasks (OpenAI-compatible API).
+
+    Forces JSON output by appending a strict system instruction and a
+    JSON-only reminder to the user prompt.
+    """
     if not GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
+
     # Convert Gemini-format contents to OpenAI-format messages
-    messages = []
+    user_content = []
+    user_text_parts = []
     for part_list in contents:
         for part in part_list.get("parts", []):
             if "inline_data" in part:
                 img = part["inline_data"]
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:{img['mime_type']};base64,{img['data']}"}},
-                    ]
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{img['mime_type']};base64,{img['data']}"},
                 })
             elif "text" in part:
-                if messages and messages[-1]["role"] == "user":
-                    messages[-1]["content"].append({"type": "text", "text": part["text"]})
-                else:
-                    messages.append({"role": "user", "content": [{"type": "text", "text": part["text"]}]})
+                user_text_parts.append(part["text"])
+
+    if user_text_parts:
+        user_content.append({
+            "type": "text",
+            "text": (
+                "\n\n".join(user_text_parts)
+                + "\n\nIMPORTANT: Return ONLY a valid JSON object matching the requested schema. "
+                "No markdown, no explanation, no code fences — only raw JSON."
+            ),
+        })
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are Kisan AI's crop diagnostic engine. "
+                "You MUST reply with valid JSON only. No markdown, no prose, no code blocks."
+            ),
+        },
+        {"role": "user", "content": user_content},
+    ]
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             GROQ_URL,
