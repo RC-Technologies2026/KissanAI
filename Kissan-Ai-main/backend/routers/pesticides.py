@@ -39,15 +39,23 @@ async def recommend_pesticide(
     # So we normalize disease_name to snake_case and try matching that first.
     products = None
 
-    # Strategy 1: normalize disease_name to snake_case (e.g. "Leaf Rust" -> "leaf_rust")
+    # Strategy 1: normalize disease_name to snake_case and try exact + fuzzy match
     if detection.disease_name:
         normalized = detection.disease_name.lower().strip()
-        # Remove common prefixes/suffixes that AI adds
+        # Remove common prefixes that AI adds
         for prefix in ["leaf ", "stem ", "root ", "fruit "]:
             if normalized.startswith(prefix):
                 normalized = normalized[len(prefix):]
         normalized = normalized.replace(" ", "_").replace("-", "_").replace("'", "").replace("/", "_")
         products = get_pesticide_recommendation(normalized)
+
+        # Fuzzy match: check if any rule key is contained in the normalized name
+        # e.g. "late_blight" contains "blight", "bacterial_leaf_blight" contains "blight"
+        if not products:
+            for key in PESTICIDE_RULES:
+                if key in normalized or normalized in key:
+                    products = get_pesticide_recommendation(key)
+                    break
 
     # Strategy 2: try disease_category (may be generic like "fungal" — rarely matches)
     if not products and detection.disease_category:
@@ -55,7 +63,14 @@ async def recommend_pesticide(
 
     # Strategy 3: try disease_name as-is (for older rows)
     if not products and detection.disease_name:
-        products = get_pesticide_recommendation(detection.disease_name.lower().replace(" ", "_"))
+        raw_key = detection.disease_name.lower().replace(" ", "_")
+        products = get_pesticide_recommendation(raw_key)
+        # Fuzzy match for older rows too
+        if not products:
+            for key in PESTICIDE_RULES:
+                if key in raw_key or raw_key in key:
+                    products = get_pesticide_recommendation(key)
+                    break
 
     # Strategy 4: fallback to default broad-spectrum products
     if not products:

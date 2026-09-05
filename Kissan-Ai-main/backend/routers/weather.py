@@ -286,13 +286,16 @@ async def get_weather_forecast(
         from collections import Counter
         most_common_cond = Counter(conditions).most_common(1)[0][0] if conditions else "clear"
 
-        # Use weighted rain chance: 70th percentile (realistic, not extreme max)
-        rain_probs_sorted = sorted(rain_probs)
-        if rain_probs_sorted:
-            idx = int(len(rain_probs_sorted) * 0.7)
-            daily_rain_chance = min(round(rain_probs_sorted[min(idx, len(rain_probs_sorted)-1)]), 80)
-        else:
-            daily_rain_chance = 0
+        # Use max rain chance across all 3-hour slots — farmers need to know
+        # if rain is expected at ANY point during the day, not just the median.
+        daily_rain_chance = min(round(max(rain_probs)), 80) if rain_probs else 0
+
+        # Override condition if rain chance is significant
+        if daily_rain_chance >= 50:
+            most_common_cond = "rain"
+        elif daily_rain_chance >= 30:
+            if "cloud" not in most_common_cond.lower():
+                most_common_cond = "partly cloudy with chance of rain"
 
         daily_forecasts.append(DailyForecastItem(
             day=day_name,
@@ -311,7 +314,7 @@ async def get_weather_forecast(
 
     for fc in daily_forecasts:
         issues: list[str] = []
-        if fc.rain_chance >= 40:
+        if fc.rain_chance >= 30:
             issues.append(f"rain expected ({fc.rain_chance}%)")
         if fc.wind_speed >= 20:
             issues.append(f"strong winds ({fc.wind_speed} km/h)")
@@ -344,7 +347,7 @@ async def get_weather_forecast(
     # Current conditions
     if current.wind_speed >= 20:
         alerts.insert(0, "Today: High wind — spraying not recommended")
-    if current.rain_probability >= 40:
+    if current.rain_probability >= 30:
         alerts.insert(0, "Today: Rain likely — hold off on irrigation")
 
     alerts = alerts[:4]
