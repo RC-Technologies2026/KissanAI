@@ -108,3 +108,116 @@ You MUST respond with a valid JSON object matching this exact schema:
 }}
 
 NOTE on image_quality: Set "usable" to false ONLY when the image is genuinely impossible to diagnose (completely blurry, no plant visible, too dark, entirely unrelated content). For any image where a plant is at least partially visible, set "usable" to true and provide your best-guess diagnosis even if confidence is lower."""
+
+
+# ---------------------------------------------------------------------------
+# Disease Diagnosis Prompt builder — for crop field disease detection.
+# Returns a language-aware prompt that enforces strict JSON output.
+# ---------------------------------------------------------------------------
+_DISEASE_JSON_SCHEMA = """{
+  "crop_name": "Identified crop in English + Urdu if applicable, e.g. 'Wheat (گندم)'",
+  "disease_name": "Short disease name in {language}, e.g. 'Leaf Rust' / 'پتوں کا زنگ'",
+  "disease_category": "One exact value from this fixed list (ALWAYS in English): ['fungal', 'bacterial', 'viral', 'pest_damage', 'nutrient_deficiency', 'healthy', 'unknown']",
+  "confidence_score": 0.85,
+  "symptoms": [
+    "Short symptom bullet point 1 in {language}",
+    "Short symptom bullet point 2 in {language}"
+  ],
+  "treatment": [
+    "Immediate action step in {language}",
+    "Specific Pakistani brand product + dosage + application method in {language}"
+  ],
+  "prevention": [
+    "Preventive measure in {language}"
+  ],
+  "image_quality": {
+    "usable": true,
+    "reason": null
+  }
+}"""
+
+
+def build_diagnosis_prompt(language: str = "english", crop_name: str | None = None) -> str:
+    """
+    Build the disease diagnosis prompt for a given language and optional crop name.
+    Called by gemini_service.diagnose_leaf_image().
+    """
+    crop_context = (
+        f"\nCROP CONTEXT: The farmer has identified this as '{crop_name}'. "
+        f"Treat this as ground truth — do NOT contradict the farmer's stated crop type."
+        if crop_name
+        else ""
+    )
+
+    schema = _DISEASE_JSON_SCHEMA.replace("{language}", language)
+
+    return f"""You are KissanAI's crop disease diagnostic engine for Pakistani farmers.
+Analyze the crop leaf image and provide an accurate disease diagnosis.{crop_context}
+
+DIAGNOSTIC RULES (MANDATORY):
+1. FIRST identify the CROP TYPE from leaf shape, venation, color, and structure.
+2. If crop_name is provided above, ALWAYS use that — never contradict the farmer.
+3. ALWAYS commit to your single most likely diagnosis. NEVER say "cannot determine".
+4. Only set image_quality.usable = false when the image is completely blurry, pitch dark, or no plant is visible at all.
+5. For slightly unclear images, still give your best-guess diagnosis with a lower confidence_score (0.5-0.7).
+6. Recommend Pakistani brands first: Syngenta Pakistan, Bayer CropScience Pakistan, FMC United, Evyol Group.
+7. language for all text fields: {language}
+
+You MUST respond with ONLY a valid JSON object matching this exact schema (no markdown, no preamble):
+{schema}"""
+
+
+# ---------------------------------------------------------------------------
+# Pest Diagnosis Prompt builder — for pest / insect detection from images.
+# ---------------------------------------------------------------------------
+_PEST_JSON_SCHEMA = """{
+  "crop_name": "Identified crop in English + Urdu if applicable, e.g. 'Cotton (کپاس)'",
+  "pest_name": "Short pest name in {language}, e.g. 'Cotton Bollworm' / 'کپاس کا سنڈی'",
+  "pest_category": "One exact value from this fixed list (ALWAYS in English): ['insect', 'mite', 'nematode', 'rodent', 'bird', 'other', 'unknown']",
+  "confidence_score": 0.85,
+  "damage_description": [
+    "Description of visible damage symptom 1 in {language}",
+    "Description of visible damage symptom 2 in {language}"
+  ],
+  "control_measures": [
+    "Immediate cultural control step in {language}",
+    "Specific Pakistani brand insecticide + dosage + application method in {language}"
+  ],
+  "prevention": [
+    "Preventive measure in {language}"
+  ],
+  "image_quality": {
+    "usable": true,
+    "reason": null
+  }
+}"""
+
+
+def build_pest_prompt(language: str = "english", crop_name: str | None = None) -> str:
+    """
+    Build the pest diagnosis prompt for a given language and optional crop name.
+    Called by gemini_service.diagnose_pest_image().
+    """
+    crop_context = (
+        f"\nCROP CONTEXT: The farmer has identified this as '{crop_name}'. "
+        f"Treat this as ground truth — do NOT contradict the farmer's stated crop type."
+        if crop_name
+        else ""
+    )
+
+    schema = _PEST_JSON_SCHEMA.replace("{language}", language)
+
+    return f"""You are KissanAI's crop pest diagnostic engine for Pakistani farmers.
+Analyze the image and identify any pest infestation or pest damage visible on the crop.{crop_context}
+
+DIAGNOSTIC RULES (MANDATORY):
+1. FIRST identify the CROP TYPE from visible plant features.
+2. If crop_name is provided above, ALWAYS use that — never contradict the farmer.
+3. ALWAYS commit to your single most likely pest identification. NEVER say "cannot determine".
+4. Only set image_quality.usable = false when the image is completely blurry, pitch dark, or no plant/pest is visible at all.
+5. For slightly unclear images, still give your best-guess pest identification with a lower confidence_score (0.5-0.7).
+6. Recommend Pakistani brands first: Syngenta Pakistan, Bayer CropScience Pakistan, FMC United, Evyol Group, Ali Akbar Group.
+7. language for all text fields: {language}
+
+You MUST respond with ONLY a valid JSON object matching this exact schema (no markdown, no preamble):
+{schema}"""

@@ -64,6 +64,7 @@ class WeatherState {
     this.hourlyForecast = const [],
     this.dailyForecast = const [],
     this.alerts = const [],
+    this.usingDefaultLocation = false,
   });
 
   final int temperatureC;
@@ -83,6 +84,8 @@ class WeatherState {
   final List<HourlyForecast> hourlyForecast;
   final List<DailyForecast> dailyForecast;
   final List<String> alerts;
+  /// True when hardcoded Faisalabad default was used (no GPS, no saved city)
+  final bool usingDefaultLocation;
 
   bool get isBlocked => rainProbability > 50 || windSpeedKmh > 18;
 
@@ -112,6 +115,7 @@ class WeatherState {
     List<HourlyForecast>? hourlyForecast,
     List<DailyForecast>? dailyForecast,
     List<String>? alerts,
+    bool? usingDefaultLocation,
   }) =>
       WeatherState(
         temperatureC: temperatureC ?? this.temperatureC,
@@ -131,6 +135,7 @@ class WeatherState {
         hourlyForecast: hourlyForecast ?? this.hourlyForecast,
         dailyForecast: dailyForecast ?? this.dailyForecast,
         alerts: alerts ?? this.alerts,
+        usingDefaultLocation: usingDefaultLocation ?? this.usingDefaultLocation,
       );
 }
 
@@ -142,13 +147,8 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
 
   final Dio _dio;
 
-  /// When true, the weather is using the hardcoded Faisalabad default
-  /// because GPS and saved farm city both failed.
-  bool _usingDefaultLocation = false;
-
   Future<void> refresh({bool force = false}) async {
     state = state.copyWith(loading: true, error: null);
-
     try {
       await _fetchWeather(force: force);
     } catch (e) {
@@ -159,11 +159,10 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
     }
   }
 
-  /// Force GPS acquisition and fetch weather. Clears any cached/default
-  /// location so the user gets a live location reading.
-  /// Refresh weather using GPS location — does NOT show full loading spinner.
-  /// Only the location icon shows a small spinner; the rest of the UI stays responsive.
+  /// Force GPS acquisition — shows loading spinner, clears saved lat/lon cache.
   Future<void> refreshWithGps() async {
+    // Show loading spinner while acquiring GPS
+    state = state.copyWith(loading: true, error: null);
     try {
       final storage = LocalStorage.instance;
       storage.farmLat = null;
@@ -171,6 +170,7 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       await _fetchWeather(force: true);
     } catch (e) {
       state = state.copyWith(
+        loading: false,
         error: AppError.fromException(e),
       );
     }
@@ -180,7 +180,6 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
   Future<void> _fetchWeather({bool force = false}) async {
     // Resolve location via LocationService (GPS -> geocoded city -> default).
     final resolved = await LocationService.instance.resolveLocation();
-    _usingDefaultLocation = resolved.isDefault;
 
     final double lat = resolved.lat;
     final double lon = resolved.lon;
@@ -251,14 +250,13 @@ class WeatherNotifier extends StateNotifier<WeatherState> {
       condition: _mapCondition(description),
       conditionIcon: _conditionToIcon(description),
       loading: false,
+      error: null,
       hourlyForecast: hourlyForecasts,
       dailyForecast: dailyForecasts,
       alerts: alertList,
+      usingDefaultLocation: resolved.isDefault,
     );
   }
-
-  /// Whether the provider fell back to the hardcoded default location.
-  bool get usingDefaultLocation => _usingDefaultLocation;
 
   /// Map backend description string to a display-friendly condition label.
   String _mapCondition(String description) {

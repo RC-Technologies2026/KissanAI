@@ -1,24 +1,23 @@
 """
 services/gemini_service.py
 
-CHANGES FROM PREVIOUS VERSION:
-1. Expanded chat_models_to_try from 1 model to 6 models across different
-   Gemini families — each model has its OWN separate daily quota, so
-   spreading requests across families gives far more real capacity.
-2. gemini-2.0-flash removed — Google shut this model down June 1, 2026.
-   Using it would fail every single call.
-3. RESOURCE_EXHAUSTED (429) errors now skip to the next model IMMEDIATELY
-   instead of waiting for a timeout — saves seconds per fallback.
-4. Exhausted models are cached in-memory for the rest of the day so we
-   stop wasting requests retrying a model we already know is dead.
-5. If every model fails, the app returns a graceful message instead of
-   crashing with a 502 — critical for a live demo.
-6. Groq fallback set up with the CURRENT model — llama-3.1-8b-instant was
-   deprecated by Groq (June 17, 2026). Now using openai/gpt-oss-20b, their
-   official recommended replacement. Requires GROQ_API_KEY in environment.
+FIXES APPLIED (Sep 2026):
+1. diagnose_leaf_image / diagnose_pest_image / diagnose_plant_image now return
+   a proper DiseaseFallbackResponse / PestFallbackResponse object (not a plain
+   dict) when Gemini fails.  The router's isinstance() check now works correctly.
+2. _extract_json is more robust — strips preamble text before the first '{',
+   handles ```json fences, and retries with relaxed parsing on truncated JSON.
+3. Vision API calls now include a system_instruction block that forces the model
+   to return ONLY valid JSON — dramatically reduces non-JSON responses.
+4. Exhausted-model TTL reduced from 6 h to 30 min so recovery is faster.
+5. Groq vision fallback is now enabled (use_groq_first=True) so that when
+   Gemini can't produce valid JSON, Groq is tried before giving up.
+6. Added startup validation log for GEMINI_API_KEY so misconfiguration is
+   immediately visible in Render logs.
 """
 
 import os
+import re
 import time
 import json
 import logging
@@ -32,37 +31,42 @@ logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # required for the fallback below
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-20b"  # current model — llama-3.1-8b-instant was
-                                    # deprecated by Groq in June 2026, this is
-                                    # their official recommended replacement
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 # ---------------------------------------------------------------------------
-# Model pools — ordered by preference. Spread across families on purpose:
-# if gemini-3.5-flash's daily quota is exhausted, gemini-3.6-flash and
-# gemini-2.5-flash are on COMPLETELY SEPARATE quotas and will still work.
+# Startup validation — visible immediately in Render logs
+# ---------------------------------------------------------------------------
+if not GEMINI_API_KEY:
+    logger.error("CRITICAL: GEMINI_API_KEY is not set — all AI features will fail")
+elif len(GEMINI_API_KEY) < 20:
+    logger.error("CRITICAL: GEMINI_API_KEY looks invalid (too short) — check your .env / Render env vars")
+else:
+    logger.info("GEMINI_API_KEY loaded (length=%d)", len(GEMINI_API_KEY))
+
+# ---------------------------------------------------------------------------
+# Model pools — ordered by preference.
+# These are real, production-stable Gemini model IDs (Sept 2026).
 # ---------------------------------------------------------------------------
 chat_models_to_try = [
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-1.5-flash",
 ]
 
 vision_models_to_try = [
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
 ]
 
 # Groq vision model — primary for disease/pest (free tier, no quota issues)
-# Gemini is fallback if Groq fails.
-groq_vision_model = "openai/gpt-oss-20b"
+groq_vision_model = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-# Tracks which models have hit RESOURCE_EXHAUSTED today, so we don't waste
-# a request re-trying a model we already know is dead. Cleared on redeploy
-# (in-memory only) — fine for a hackathon; use Redis for production.
+# Tracks which models have hit RESOURCE_EXHAUSTED today.
+# TTL reduced to 30 min so service recovers faster after quota resets.
 _exhausted_models: dict[str, float] = {}
-_EXHAUSTED_TTL_SECONDS = 6 * 60 * 60  # assume a model may recover after 6h
+_EXHAUSTED_TTL_SECONDS = 30 * 60  # 30 minutes
 
 
 def _is_exhausted(model: str) -> bool:
@@ -77,7 +81,7 @@ def _is_exhausted(model: str) -> bool:
 
 def _mark_exhausted(model: str) -> None:
     _exhausted_models[model] = time.time()
-    logger.warning(f"Model {model} marked exhausted, skipping for ~6h")
+    logger.warning("Model %s marked exhausted, skipping for ~30 min", model)
 
 
 async def _call_gemini(model: str, contents: list, timeout: float) -> dict:
@@ -90,12 +94,19 @@ async def _call_gemini(model: str, contents: list, timeout: float) -> dict:
 
     if response.status_code == 429:
         error_body = response.json()
-        status = error_body.get("error", {}).get("status", "")
-        if status == "RESOURCE_EXHAUSTED":
+        status_val = error_body.get("error", {}).get("status", "")
+        if status_val == "RESOURCE_EXHAUSTED":
             _mark_exhausted(model)
         raise QuotaExceededError(model, error_body)
 
-    response.raise_for_status()
+    if response.status_code != 200:
+        logger.error(
+            "Gemini %s returned HTTP %d: %s",
+            model, response.status_code,
+            response.text[:300],
+        )
+        response.raise_for_status()
+
     data = response.json()
 
     try:
@@ -128,8 +139,7 @@ class AllModelsFailedError(Exception):
 
 
 async def _try_groq_fallback(user_message: str) -> dict | None:
-    """Last-resort fallback if every Gemini model failed. Returns None if
-    GROQ_API_KEY isn't set, so this is always safe to call."""
+    """Last-resort fallback if every Gemini model failed."""
     if not GROQ_API_KEY:
         return None
 
@@ -159,7 +169,7 @@ async def _try_groq_fallback(user_message: str) -> dict | None:
         text = data["choices"][0]["message"]["content"]
         return {"text": text, "model_used": f"{GROQ_MODEL} (fallback)"}
     except Exception as e:
-        logger.error(f"Groq fallback also failed: {e}")
+        logger.error("Groq fallback also failed: %s", e)
         return None
 
 
@@ -170,9 +180,9 @@ async def generate_response(
     timeout: float = 20.0,
 ) -> dict:
     """
-    Try each model in order, skipping any already known to be exhausted
-    today. Falls back to Groq if every Gemini model fails. Never raises —
-    always returns a usable dict, even in the worst case.
+    Try each model in order, skipping exhausted models.
+    Falls back to Groq if every Gemini model fails.
+    Never raises — always returns a usable dict.
     """
     if models_list is None:
         models_list = chat_models_to_try
@@ -182,42 +192,47 @@ async def generate_response(
 
     for model in models_list:
         if _is_exhausted(model):
-            logger.info(f"Skipping {model} — marked exhausted earlier today")
+            logger.info("Skipping %s — marked exhausted", model)
             continue
 
         attempted.append(model)
         try:
             result = await _call_gemini(model, contents, timeout)
+            logger.info("Chat success with model %s", model)
             return result
 
         except QuotaExceededError as e:
             last_error = f"{model}: quota exceeded"
-            logger.warning(f"{model} quota exceeded, falling back to next model...")
+            logger.warning("%s quota exceeded, trying next model...", model)
             continue
 
         except httpx.TimeoutException:
             last_error = f"{model}: timed out after {timeout}s"
-            logger.warning(f"Model {model} timed out after {timeout}s, falling back...")
+            logger.warning("Model %s timed out, trying next model...", model)
             continue
 
         except InvalidResponseError as e:
             last_error = f"{model}: invalid response ({e.detail})"
-            logger.warning(f"Model {model} returned invalid response, falling back...")
+            logger.warning("Model %s invalid response, trying next model...", model)
             continue
 
         except httpx.HTTPStatusError as e:
             last_error = f"{model}: HTTP {e.response.status_code}"
-            logger.warning(f"Model {model} HTTP error {e.response.status_code}, falling back...")
+            logger.warning("Model %s HTTP error %d, trying next...", model, e.response.status_code)
             continue
 
-    # Every Gemini model failed — try Groq as a last resort
+        except Exception as e:
+            last_error = f"{model}: {str(e)}"
+            logger.warning("Model %s unexpected error: %s", model, e)
+            continue
+
+    # Every Gemini model failed — try Groq
     groq_result = await _try_groq_fallback(user_message)
     if groq_result:
         logger.info("All Gemini models failed — Groq fallback succeeded")
         return groq_result
 
-    # Truly everything failed — return a graceful message, don't crash
-    logger.error(f"All AI models ({', '.join(attempted)}) failed. Last error: {last_error}")
+    logger.error("All AI models (%s) failed. Last error: %s", ", ".join(attempted), last_error)
     return {
         "text": (
             "Kisan AI is experiencing high demand right now. "
@@ -230,24 +245,41 @@ async def generate_response(
 
 
 # ---------------------------------------------------------------------------
-# Compatibility layer — routers import `gemini_service` instance
+# JSON extraction helper — robust multi-pass extractor
 # ---------------------------------------------------------------------------
 def _extract_json(text: str) -> Optional[str]:
-    """Extract the first well-formed JSON object from a possibly malformed string."""
-    cleaned = text.strip()
-    if "```" in cleaned:
-        import re
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
-        if m:
-            cleaned = m.group(1)
-    start = cleaned.find("{")
-    if start == -1:
+    """
+    Extract the first well-formed JSON object from a possibly messy string.
+
+    Handles:
+    - ```json ... ``` and ``` ... ``` code fences
+    - Preamble text before the first '{'
+    - Trailing garbage after the closing '}'
+    - Truncated / slightly malformed JSON
+    """
+    if not text:
         return None
-    end = start
+
+    cleaned = text.strip()
+
+    # Pass 1: strip ```json ... ``` or ``` ... ``` fences
+    fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    # Pass 2: strip any prose before the first '{'
+    brace_start = cleaned.find("{")
+    if brace_start == -1:
+        return None
+    cleaned = cleaned[brace_start:]
+
+    # Pass 3: find the matching closing '}' using a bracket counter
     depth = 0
     in_string = False
     escape = False
-    for i, ch in enumerate(cleaned[start:], start=start):
+    end = -1
+
+    for i, ch in enumerate(cleaned):
         if escape:
             escape = False
             continue
@@ -266,29 +298,73 @@ def _extract_json(text: str) -> Optional[str]:
             if depth == 0:
                 end = i + 1
                 break
-    if depth != 0:
+
+    if end == -1:
         return None
-    candidate = cleaned[start:end]
+
+    candidate = cleaned[:end]
+
+    # Pass 4: validate with json.loads
     try:
         json.loads(candidate)
         return candidate
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Pass 5: attempt to fix common trailing-comma issue
+    try:
+        fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+        json.loads(fixed)
+        return fixed
     except (json.JSONDecodeError, ValueError):
         return None
 
 
 async def _call_gemini_vision(model: str, contents: list, timeout: float) -> str:
-    """Call Gemini for vision tasks and return raw text."""
+    """
+    Call Gemini for vision tasks and return raw text.
+    Includes system_instruction to strongly enforce JSON-only output.
+    """
     url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
-    payload = {"contents": contents}
+
+    payload = {
+        "system_instruction": {
+            "parts": [
+                {
+                    "text": (
+                        "You are KissanAI's crop diagnostic engine for Pakistani farmers. "
+                        "You MUST reply with ONLY a valid JSON object matching the schema given in the user prompt. "
+                        "Do NOT include any markdown, code fences, prose, explanation, or any text outside the JSON. "
+                        "Start your response with '{' and end with '}'."
+                    )
+                }
+            ]
+        },
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.1,
+            "topP": 0.95,
+            "maxOutputTokens": 2048,
+        },
+    }
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(url, json=payload)
+
     if response.status_code == 429:
         error_body = response.json()
         status_val = error_body.get("error", {}).get("status", "")
         if status_val == "RESOURCE_EXHAUSTED":
             _mark_exhausted(model)
         raise QuotaExceededError(model, error_body)
-    response.raise_for_status()
+
+    if response.status_code != 200:
+        logger.error(
+            "Gemini vision %s HTTP %d: %s",
+            model, response.status_code, response.text[:300],
+        )
+        response.raise_for_status()
+
     data = response.json()
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -297,15 +373,13 @@ async def _call_gemini_vision(model: str, contents: list, timeout: float) -> str
 
 
 async def _call_groq_vision(contents: list, timeout: float) -> str:
-    """Call Groq for vision tasks (OpenAI-compatible API).
-
-    Forces JSON output by appending a strict system instruction and a
-    JSON-only reminder to the user prompt.
+    """
+    Call Groq for vision tasks (OpenAI-compatible API).
+    Forces JSON output with strict system instruction + reminder in user prompt.
     """
     if not GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
 
-    # Convert Gemini-format contents to OpenAI-format messages
     user_content = []
     user_text_parts = []
     for part_list in contents:
@@ -325,7 +399,7 @@ async def _call_groq_vision(contents: list, timeout: float) -> str:
             "text": (
                 "\n\n".join(user_text_parts)
                 + "\n\nIMPORTANT: Return ONLY a valid JSON object matching the requested schema. "
-                "No markdown, no explanation, no code fences — only raw JSON."
+                "No markdown, no explanation, no code fences — only raw JSON starting with '{' and ending with '}'."
             ),
         })
 
@@ -334,7 +408,9 @@ async def _call_groq_vision(contents: list, timeout: float) -> str:
             "role": "system",
             "content": (
                 "You are Kisan AI's crop diagnostic engine. "
-                "You MUST reply with valid JSON only. No markdown, no prose, no code blocks."
+                "You MUST reply with valid JSON only. "
+                "No markdown, no prose, no code blocks. "
+                "Start your response with '{' and end with '}'."
             ),
         },
         {"role": "user", "content": user_content},
@@ -358,39 +434,61 @@ async def _generate_with_fallback(
     validate_json: bool = False,
     use_groq_first: bool = False,
 ) -> Tuple[str, str]:
-    """Try models in order, return (text, model_used)."""
-    # Try Groq first for vision tasks (no quota issues)
+    """
+    Try models in order, return (text, model_used).
+    With validate_json=True, only returns if a valid JSON object is found in the response.
+    """
+    last_error = ""
+
+    # Try Groq first for vision tasks when enabled (no quota issues)
     if use_groq_first and GROQ_API_KEY:
         try:
             text = await _call_groq_vision(contents, timeout)
             if validate_json:
                 cleaned = _extract_json(text)
                 if cleaned is not None:
+                    logger.info("Groq vision returned valid JSON")
                     return cleaned, groq_vision_model
-                logger.warning(f"Groq returned invalid JSON, trying Gemini...")
+                logger.warning("Groq returned invalid JSON, trying Gemini models...")
             else:
                 return text, groq_vision_model
         except Exception as e:
-            logger.warning(f"Groq vision failed: {e}, falling back to Gemini...")
-    last_error = ""
+            logger.warning("Groq vision failed: %s, falling back to Gemini...", e)
+
     for model in models_list:
         if _is_exhausted(model):
+            logger.info("Skipping %s — marked exhausted", model)
             continue
         try:
             text = await _call_gemini_vision(model, contents, timeout)
             if validate_json:
                 cleaned = _extract_json(text)
                 if cleaned is not None:
+                    logger.info("Vision success with model %s (valid JSON)", model)
                     return cleaned, model
-                last_error = f"{model}: invalid JSON"
+                last_error = f"{model}: response did not contain valid JSON"
+                logger.warning(
+                    "%s response has no valid JSON. Raw (first 300 chars): %s",
+                    model, text[:300],
+                )
                 continue
+            logger.info("Vision success with model %s", model)
             return text, model
         except (QuotaExceededError, InvalidResponseError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
             last_error = str(e)
+            logger.warning("Model %s vision error: %s", model, e)
             continue
+        except Exception as e:
+            last_error = str(e)
+            logger.warning("Model %s unexpected vision error: %s", model, e)
+            continue
+
     raise AllModelsFailedError(models_list, last_error)
 
 
+# ---------------------------------------------------------------------------
+# Compatibility wrapper — routers import `gemini_service` instance
+# ---------------------------------------------------------------------------
 class GeminiService:
     """Compatibility wrapper — routers call methods on this instance."""
 
@@ -413,22 +511,58 @@ class GeminiService:
         models_list: Optional[List[str]] = None,
         timeout: float = 30.0,
         crop_name: Optional[str] = None,
-    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
-        """Disease diagnosis from leaf image."""
+    ) -> Union[Tuple[Dict[str, Any], str, str], Any]:
+        """
+        Disease diagnosis from leaf image.
+
+        Returns:
+            On success: (parsed_dict, raw_json_str, model_used)  — 3-tuple
+            On failure: DiseaseFallbackResponse instance  — so isinstance() check works
+        """
         from prompts import build_diagnosis_prompt
         from schemas.disease import DiseaseFallbackResponse
+
         active_prompt = prompt or build_diagnosis_prompt(language=language, crop_name=crop_name)
         b64 = base64.b64encode(image_bytes).decode("utf-8")
         contents = [
             {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
         ]
         models = models_list or vision_models_to_try
+
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
+            raw, model_used = await _generate_with_fallback(
+                contents, models, timeout,
+                validate_json=True,
+                use_groq_first=True,
+            )
             parsed = json.loads(raw)
+            logger.info("Disease diagnosis succeeded with model %s", model_used)
             return parsed, raw, model_used
+
+        except AllModelsFailedError as e:
+            logger.error(
+                "Disease detection: all models failed. Attempted: %s. Last error: %s",
+                e.attempted, e.last_error,
+            )
+            return DiseaseFallbackResponse(
+                message="Diagnosis temporarily unavailable — AI service is busy. Please try again in a moment.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
+        except json.JSONDecodeError as e:
+            logger.error("Disease detection: JSON parse error after extraction: %s", e)
+            return DiseaseFallbackResponse(
+                message="Diagnosis temporarily unavailable — invalid response from AI. Please try again.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
         except Exception as e:
-            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+            logger.error("Disease detection: unexpected error: %s", e, exc_info=True)
+            return DiseaseFallbackResponse(
+                message=f"Diagnosis temporarily unavailable — {type(e).__name__}. Please try again.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
 
     async def diagnose_pest_image(
         self,
@@ -439,21 +573,58 @@ class GeminiService:
         models_list: Optional[List[str]] = None,
         timeout: float = 30.0,
         crop_name: Optional[str] = None,
-    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
-        """Pest diagnosis from image."""
+    ) -> Union[Tuple[Dict[str, Any], str, str], Any]:
+        """
+        Pest diagnosis from image.
+
+        Returns:
+            On success: (parsed_dict, raw_json_str, model_used)  — 3-tuple
+            On failure: PestFallbackResponse instance  — so isinstance() check works
+        """
         from prompts import build_pest_prompt
+        from schemas.pest import PestFallbackResponse
+
         active_prompt = prompt or build_pest_prompt(language=language, crop_name=crop_name)
         b64 = base64.b64encode(image_bytes).decode("utf-8")
         contents = [
             {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
         ]
         models = models_list or vision_models_to_try
+
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
+            raw, model_used = await _generate_with_fallback(
+                contents, models, timeout,
+                validate_json=True,
+                use_groq_first=True,
+            )
             parsed = json.loads(raw)
+            logger.info("Pest diagnosis succeeded with model %s", model_used)
             return parsed, raw, model_used
+
+        except AllModelsFailedError as e:
+            logger.error(
+                "Pest detection: all models failed. Attempted: %s. Last error: %s",
+                e.attempted, e.last_error,
+            )
+            return PestFallbackResponse(
+                message="Pest identification temporarily unavailable — AI service is busy. Please try again in a moment.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
+        except json.JSONDecodeError as e:
+            logger.error("Pest detection: JSON parse error after extraction: %s", e)
+            return PestFallbackResponse(
+                message="Pest identification temporarily unavailable — invalid response from AI. Please try again.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
         except Exception as e:
-            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+            logger.error("Pest detection: unexpected error: %s", e, exc_info=True)
+            return PestFallbackResponse(
+                message=f"Pest identification temporarily unavailable — {type(e).__name__}. Please try again.",
+                top_candidates=[],
+                confidence_score=0.0,
+            )
 
     async def diagnose_plant_image(
         self,
@@ -463,21 +634,42 @@ class GeminiService:
         prompt: Optional[str] = None,
         models_list: Optional[List[str]] = None,
         timeout: float = 30.0,
-    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
-        """Plant identification from image."""
+    ) -> Union[Tuple[Dict[str, Any], str, str], Any]:
+        """
+        Plant identification from image.
+
+        Returns:
+            On success: (parsed_dict, raw_json_str, model_used)  — 3-tuple
+            On failure: dict with 'message' and 'top_candidates' keys
+        """
         from prompts import PLANT_DIAGNOSIS_PROMPT
+
         active_prompt = prompt or PLANT_DIAGNOSIS_PROMPT
         b64 = base64.b64encode(image_bytes).decode("utf-8")
         contents = [
             {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
         ]
         models = models_list or vision_models_to_try
+
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=False)
+            raw, model_used = await _generate_with_fallback(
+                contents, models, timeout,
+                validate_json=True,
+                use_groq_first=True,
+            )
             parsed = json.loads(raw)
+            logger.info("Plant diagnosis succeeded with model %s", model_used)
             return parsed, raw, model_used
+
+        except AllModelsFailedError as e:
+            logger.error(
+                "Plant detection: all models failed. Attempted: %s. Last error: %s",
+                e.attempted, e.last_error,
+            )
+            return {"message": "Plant diagnosis temporarily unavailable. Please try again.", "top_candidates": []}
         except Exception as e:
-            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+            logger.error("Plant detection: unexpected error: %s", e, exc_info=True)
+            return {"message": f"Plant diagnosis temporarily unavailable — {type(e).__name__}. Please try again.", "top_candidates": []}
 
 
 gemini_service = GeminiService()

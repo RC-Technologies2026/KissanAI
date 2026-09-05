@@ -87,8 +87,8 @@ class DetectionNotifier extends StateNotifier<DetectionState> {
     state = const DetectionState(status: DetectionStatus.loading);
     try {
       final res = type == DetectionType.disease
-          ? await _api.detectDisease(filePath, language: language)
-          : await _api.detectPest(filePath, language: language);
+          ? await _api.detectDisease(filePath, language: language, cropName: cropName)
+          : await _api.detectPest(filePath, language: language, cropName: cropName);
 
       final data = res.data;
 

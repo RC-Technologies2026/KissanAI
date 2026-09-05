@@ -46,7 +46,7 @@ def _get_redis() -> Optional[Redis]:
                 port=REDIS_PORT,
                 username=REDIS_USERNAME or None,
                 password=REDIS_PASSWORD or None,
-                ssl=False,
+                ssl=True,
                 decode_responses=True,
                 socket_timeout=5.0,
                 socket_connect_timeout=5.0,

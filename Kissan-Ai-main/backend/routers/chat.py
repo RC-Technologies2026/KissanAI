@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, desc
@@ -12,6 +13,7 @@ from rate_limiter import limiter
 from services.gemini_service import gemini_service
 from prompts import CHAT_USER_PROMPT_TEMPLATE
 
+logger = logging.getLogger("kissanai.chat")
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
@@ -25,14 +27,17 @@ async def chat(
 ):
     try:
         prompt = CHAT_USER_PROMPT_TEMPLATE.format(message=body.message)
-        # Chat uses a short timeout (7s) — farmers expect instant answers.
-        ai_response = await gemini_service.generate_response(prompt, timeout=7.0)
+        # 15s timeout — fast enough for warm server, graceful on cold start
+        ai_response = await gemini_service.generate_response(prompt, timeout=15.0)
+        logger.info("Chat response generated successfully")
     except ValueError as e:
+        logger.error("Chat ValueError: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
     except Exception as e:
+        logger.error("Chat Gemini API error: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Gemini API error: {str(e)}",

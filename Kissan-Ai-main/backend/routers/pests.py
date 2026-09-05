@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,8 @@ from cloudinary import uploader
 from utils.validation import check_magic_bytes, validate_extension, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
 from services.gemini_service import gemini_service
 from rate_limiter import limiter
+
+logger = logging.getLogger("kissanai.pests")
 
 router = APIRouter(prefix="/api/pests", tags=["pests"])
 
@@ -57,7 +60,8 @@ async def detect_pest(
         cloudinary_result = await asyncio.to_thread(
             uploader.upload_resource, contents, folder="kissanai/pest"
         )
-    except Exception:
+    except Exception as upload_err:
+        logger.error("Cloudinary upload failed: %s", upload_err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Image upload failed")
 
     if isinstance(cloudinary_result, dict):
@@ -81,12 +85,13 @@ async def detect_pest(
             image_bytes=contents,
             mime_type=content_type,
             language=selected_language,
-            timeout=25.0,
+            timeout=30.0,
             crop_name=crop_name,
         )
     except Exception as gemini_err:
-        # Gemini or network failure — return a graceful fallback response
-        # so the app never shows a raw server error to the farmer.
+        # diagnose_pest_image should never raise (it handles internally),
+        # but just in case — return graceful fallback.
+        logger.error("Pest detection unexpected raise: %s", gemini_err, exc_info=True)
         return PestDetectionResponse(
             id=None,
             image_id=image.id,
@@ -98,21 +103,15 @@ async def detect_pest(
             detected_at=None,
             diagnosis=(
                 "We could not complete the AI pest identification right now. "
-                f"Reason: {str(gemini_err)}\n\n"
                 "Please try again in a moment with a clear photo in daylight."
             ),
         )
 
+    # ── Case 1: AI returned a proper FallbackResponse (all models failed / bad image) ──
     if isinstance(result, PestFallbackResponse):
+        logger.warning("Pest detection: FallbackResponse — %s", result.message)
         candidates = result.top_candidates or []
-        extra = ""
-        if candidates:
-            extra = f" Possible matches: {', '.join(candidates)}."
-        diagnosis = (
-            f"{result.message}{extra}\n\n"
-            "Please take a clearer photo in daylight, close to the affected insect or damage, "
-            "and make sure the crop is visible."
-        )
+        extra = f" Possible matches: {', '.join(candidates)}." if candidates else ""
         return PestDetectionResponse(
             id=None,
             image_id=image.id,
@@ -122,12 +121,32 @@ async def detect_pest(
             confidence_score=0.0,
             model_version=None,
             detected_at=None,
-            diagnosis=diagnosis,
+            diagnosis=(
+                f"{result.message}{extra}\n\n"
+                "Please take a clearer photo in daylight, close to the affected insect or damage, "
+                "and make sure the crop is visible."
+            ),
         )
 
-    parsed_data, formatted_markdown, model_used = result
+    # ── Case 2: Safety net — plain dict fallback (should not happen with new code) ──
+    if isinstance(result, dict):
+        logger.warning("Pest detection: plain dict fallback — %s", result.get("message", "?"))
+        return PestDetectionResponse(
+            id=None,
+            image_id=image.id,
+            crop_name=crop_name or "Unknown crop",
+            pest_name="Identification temporarily unavailable",
+            pest_category=None,
+            confidence_score=0.0,
+            model_version=None,
+            detected_at=None,
+            diagnosis=result.get("message", "Could not complete diagnosis. Please try again."),
+        )
 
-    # Dynamically extract pest_name and confidence_score from Gemini response
+    # ── Case 3: Success — 3-tuple (parsed_dict, formatted_markdown, model_used) ──
+    parsed_data, formatted_markdown, model_used = result
+    logger.info("Pest detection success: model=%s", model_used)
+
     pest_name = parsed_data.get("pest_name") or "Pest Identification"
     pest_category = parsed_data.get("pest_category")
     confidence_val = parsed_data.get("confidence_score")
@@ -136,7 +155,7 @@ async def detect_pest(
     except (ValueError, TypeError):
         confidence_score = None
 
-    # Ensure minimum confidence for valid diagnoses (Groq often returns low values)
+    # Ensure minimum confidence for valid diagnoses
     if confidence_score is not None and confidence_score < 0.75:
         confidence_score = 0.75
 

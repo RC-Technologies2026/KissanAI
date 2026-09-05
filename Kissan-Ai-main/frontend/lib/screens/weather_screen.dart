@@ -14,19 +14,15 @@ class WeatherScreen extends ConsumerStatefulWidget {
 }
 
 class _WeatherScreenState extends ConsumerState<WeatherScreen> {
-  bool _locating = false;
-
-  Future<void> _useMyLocation() async {
-    setState(() => _locating = true);
-    await ref.read(weatherProvider.notifier).refreshWithGps();
-    if (mounted) setState(() => _locating = false);
-  }
+  // No local _locating flag needed — we use weather.loading from state
 
   @override
   Widget build(BuildContext context) {
     final weather = ref.watch(weatherProvider);
     final lang = ref.watch(languageProvider);
-    final usingDefault = ref.read(weatherProvider.notifier).usingDefaultLocation;
+    // Reactively read from state (not ref.read) so banner updates after GPS refresh
+    final usingDefault = weather.usingDefaultLocation;
+    final isLoading = weather.loading;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -47,8 +43,9 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
           ),
         ),
         actions: [
+          // GPS location button
           IconButton(
-            icon: _locating
+            icon: isLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -57,12 +54,13 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                   )
                 : const Icon(Icons.my_location, color: AppColors.primary),
             tooltip: 'Use my current location',
-            onPressed: _locating
+            onPressed: isLoading
                 ? null
-                : _useMyLocation,
+                : () => ref.read(weatherProvider.notifier).refreshWithGps(),
           ),
+          // Refresh button
           IconButton(
-            icon: weather.loading
+            icon: isLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -70,7 +68,8 @@ class _WeatherScreenState extends ConsumerState<WeatherScreen> {
                         strokeWidth: 2, color: AppColors.primary),
                   )
                 : const Icon(Icons.refresh, color: AppColors.primary),
-            onPressed: weather.loading
+            tooltip: 'Refresh weather',
+            onPressed: isLoading
                 ? null
                 : () => ref.read(weatherProvider.notifier).refresh(force: true),
           ),

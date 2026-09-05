@@ -121,20 +121,22 @@ class ApiClient {
 
   // ─── Disease ─────────────────────────────────────────────
 
-  Future<Response> detectDisease(String filePath, {String language = 'english'}) async {
+  Future<Response> detectDisease(String filePath, {String language = 'english', String? cropName}) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
       'language': language,
+      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
     });
     return _dio.post('/api/disease/detect', data: formData);
   }
 
   // ─── Pests ───────────────────────────────────────────────
 
-  Future<Response> detectPest(String filePath, {String language = 'english'}) async {
+  Future<Response> detectPest(String filePath, {String language = 'english', String? cropName}) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
       'language': language,
+      if (cropName != null && cropName.isNotEmpty) 'crop_name': cropName,
     });
     return _dio.post('/api/pests/detect', data: formData);
   }

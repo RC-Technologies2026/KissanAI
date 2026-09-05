@@ -231,6 +231,7 @@ async def get_weather_forecast(
         request=request,
         lat=lat,
         lon=lon,
+        force=force,
         db=db,
         current_user=current_user,
     )
