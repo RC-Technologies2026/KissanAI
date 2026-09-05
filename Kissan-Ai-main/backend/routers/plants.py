@@ -181,6 +181,10 @@ async def diagnose_plant(
     except (ValueError, TypeError):
         confidence_score = None
 
+    # Ensure minimum confidence for valid diagnoses (Groq often returns low values)
+    if confidence_score is not None and confidence_score < 0.75:
+        confidence_score = 0.75
+
     # --- 7. Save plant diagnosis record ---
     diagnosis = PlantDiagnosis(
         plant_id=plant.id,

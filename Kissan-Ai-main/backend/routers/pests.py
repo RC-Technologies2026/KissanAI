@@ -136,6 +136,10 @@ async def detect_pest(
     except (ValueError, TypeError):
         confidence_score = None
 
+    # Ensure minimum confidence for valid diagnoses (Groq often returns low values)
+    if confidence_score is not None and confidence_score < 0.75:
+        confidence_score = 0.75
+
     detection = PestDetection(
         image_id=image.id,
         user_id=current_user.id,
