@@ -44,7 +44,6 @@ GROQ_MODEL = "openai/gpt-oss-20b"  # current model — llama-3.1-8b-instant was
 # gemini-2.5-flash are on COMPLETELY SEPARATE quotas and will still work.
 # ---------------------------------------------------------------------------
 chat_models_to_try = [
-    "gemini-2.5-flash",
     "gemini-3.5-flash",
     "gemini-3.6-flash",
     "gemini-3.7-flash",
@@ -55,7 +54,6 @@ chat_models_to_try = [
 vision_models_to_try = [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-2.5-flash",
 ]
 
 # Groq vision model — primary for disease/pest (free tier, no quota issues)
@@ -348,6 +346,7 @@ async def _generate_with_fallback(
                 cleaned = _extract_json(text)
                 if cleaned is not None:
                     return cleaned, groq_vision_model
+                logger.warning(f"Groq returned invalid JSON, trying Gemini...")
             else:
                 return text, groq_vision_model
         except Exception as e:
