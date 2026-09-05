@@ -23,6 +23,9 @@ import time
 import json
 import logging
 import httpx
+import base64
+from typing import Optional, List, Union, Tuple, Any, Dict
+from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
@@ -224,3 +227,188 @@ async def generate_response(
         "fallback": True,
         "error_detail": last_error,
     }
+
+
+# ---------------------------------------------------------------------------
+# Compatibility layer — routers import `gemini_service` instance
+# ---------------------------------------------------------------------------
+def _extract_json(text: str) -> Optional[str]:
+    """Extract the first well-formed JSON object from a possibly malformed string."""
+    cleaned = text.strip()
+    if "```" in cleaned:
+        import re
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+        if m:
+            cleaned = m.group(1)
+    start = cleaned.find("{")
+    if start == -1:
+        return None
+    end = start
+    depth = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(cleaned[start:], start=start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if depth != 0:
+        return None
+    candidate = cleaned[start:end]
+    try:
+        json.loads(candidate)
+        return candidate
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+async def _call_gemini_vision(model: str, contents: list, timeout: float) -> str:
+    """Call Gemini for vision tasks and return raw text."""
+    url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+    payload = {"contents": contents}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json=payload)
+    if response.status_code == 429:
+        error_body = response.json()
+        status_val = error_body.get("error", {}).get("status", "")
+        if status_val == "RESOURCE_EXHAUSTED":
+            _mark_exhausted(model)
+        raise QuotaExceededError(model, error_body)
+    response.raise_for_status()
+    data = response.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise InvalidResponseError(model, str(e))
+
+
+async def _generate_with_fallback(
+    contents: list,
+    models_list: List[str],
+    timeout: float = 30.0,
+    validate_json: bool = False,
+) -> Tuple[str, str]:
+    """Try models in order, return (text, model_used)."""
+    last_error = ""
+    for model in models_list:
+        if _is_exhausted(model):
+            continue
+        try:
+            text = await _call_gemini_vision(model, contents, timeout)
+            if validate_json:
+                cleaned = _extract_json(text)
+                if cleaned is not None:
+                    return cleaned, model
+                last_error = f"{model}: invalid JSON"
+                continue
+            return text, model
+        except (QuotaExceededError, InvalidResponseError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            last_error = str(e)
+            continue
+    raise AllModelsFailedError(models_list, last_error)
+
+
+class GeminiService:
+    """Compatibility wrapper — routers call methods on this instance."""
+
+    async def generate_response(self, message: str, timeout: float = 30.0) -> str:
+        """Chat: returns text string."""
+        contents = [{"parts": [{"text": message}]}]
+        result = await generate_response(
+            contents=contents,
+            user_message=message,
+            timeout=timeout,
+        )
+        return result.get("text", "")
+
+    async def diagnose_leaf_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        language: str = "english",
+        prompt: Optional[str] = None,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 30.0,
+        crop_name: Optional[str] = None,
+    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
+        """Disease diagnosis from leaf image."""
+        from prompts import build_diagnosis_prompt
+        from schemas.disease import DiseaseFallbackResponse
+        active_prompt = prompt or build_diagnosis_prompt(language=language, crop_name=crop_name)
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        contents = [
+            {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
+        ]
+        models = models_list or vision_models_to_try
+        try:
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            parsed = json.loads(raw)
+            return parsed, raw, model_used
+        except Exception as e:
+            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+
+    async def diagnose_pest_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        language: str = "english",
+        prompt: Optional[str] = None,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 30.0,
+        crop_name: Optional[str] = None,
+    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
+        """Pest diagnosis from image."""
+        from prompts import build_pest_prompt
+        active_prompt = prompt or build_pest_prompt(language=language, crop_name=crop_name)
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        contents = [
+            {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
+        ]
+        models = models_list or vision_models_to_try
+        try:
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            parsed = json.loads(raw)
+            return parsed, raw, model_used
+        except Exception as e:
+            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+
+    async def diagnose_plant_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        language: str = "english",
+        prompt: Optional[str] = None,
+        models_list: Optional[List[str]] = None,
+        timeout: float = 30.0,
+    ) -> Union[Tuple[Dict[str, Any], str, str], Dict[str, Any]]:
+        """Plant identification from image."""
+        from prompts import PLANT_DIAGNOSIS_PROMPT
+        active_prompt = prompt or PLANT_DIAGNOSIS_PROMPT
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        contents = [
+            {"parts": [{"inline_data": {"mime_type": mime_type, "data": b64}}, {"text": active_prompt}]}
+        ]
+        models = models_list or vision_models_to_try
+        try:
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            parsed = json.loads(raw)
+            return parsed, raw, model_used
+        except Exception as e:
+            return {"message": f"Diagnosis temporarily unavailable: {str(e)}", "top_candidates": []}
+
+
+gemini_service = GeminiService()
