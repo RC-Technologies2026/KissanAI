@@ -58,6 +58,10 @@ vision_models_to_try = [
     "gemini-2.5-flash",
 ]
 
+# Groq vision model — primary for disease/pest (free tier, no quota issues)
+# Gemini is fallback if Groq fails.
+groq_vision_model = "openai/gpt-oss-20b"
+
 # Tracks which models have hit RESOURCE_EXHAUSTED today, so we don't waste
 # a request re-trying a model we already know is dead. Cleared on redeploy
 # (in-memory only) — fine for a hackathon; use Redis for production.
@@ -296,13 +300,58 @@ async def _call_gemini_vision(model: str, contents: list, timeout: float) -> str
         raise InvalidResponseError(model, str(e))
 
 
+async def _call_groq_vision(contents: list, timeout: float) -> str:
+    """Call Groq for vision tasks (OpenAI-compatible API)."""
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
+    # Convert Gemini-format contents to OpenAI-format messages
+    messages = []
+    for part_list in contents:
+        for part in part_list.get("parts", []):
+            if "inline_data" in part:
+                img = part["inline_data"]
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:{img['mime_type']};base64,{img['data']}"}},
+                    ]
+                })
+            elif "text" in part:
+                if messages and messages[-1]["role"] == "user":
+                    messages[-1]["content"].append({"type": "text", "text": part["text"]})
+                else:
+                    messages.append({"role": "user", "content": [{"type": "text", "text": part["text"]}]})
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={"model": groq_vision_model, "messages": messages},
+        )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
 async def _generate_with_fallback(
     contents: list,
     models_list: List[str],
     timeout: float = 30.0,
     validate_json: bool = False,
+    use_groq_first: bool = False,
 ) -> Tuple[str, str]:
     """Try models in order, return (text, model_used)."""
+    # Try Groq first for vision tasks (no quota issues)
+    if use_groq_first and GROQ_API_KEY:
+        try:
+            text = await _call_groq_vision(contents, timeout)
+            if validate_json:
+                cleaned = _extract_json(text)
+                if cleaned is not None:
+                    return cleaned, groq_vision_model
+            else:
+                return text, groq_vision_model
+        except Exception as e:
+            logger.warning(f"Groq vision failed: {e}, falling back to Gemini...")
     last_error = ""
     for model in models_list:
         if _is_exhausted(model):
@@ -355,7 +404,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
@@ -380,7 +429,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
@@ -404,7 +453,7 @@ class GeminiService:
         ]
         models = models_list or vision_models_to_try
         try:
-            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True)
+            raw, model_used = await _generate_with_fallback(contents, models, timeout, validate_json=True, use_groq_first=True)
             parsed = json.loads(raw)
             return parsed, raw, model_used
         except Exception as e:
