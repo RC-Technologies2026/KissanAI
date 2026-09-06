@@ -1,12 +1,9 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import '../core/api/api_client.dart';
 import '../core/constants/app_colors.dart';
-import '../core/constants/app_constants.dart';
 import '../core/utils/error_handler.dart';
 import '../providers/language_provider.dart';
 
@@ -36,6 +33,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollCtrl = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isLoading = false;
+  Timer? _typingTimer;
 
   final List<String> _suggestions = [
     'What crop should I plant this season?',
@@ -118,9 +116,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _typingTimer?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  /// Reveal AI response word-by-word for a smooth professional streaming feel.
+  void _animateResponse(String fullText, int messageIndex) {
+    _typingTimer?.cancel();
+    final words = fullText.split(' ');
+    var currentIndex = 0;
+    _typingTimer = Timer.periodic(const Duration(milliseconds: 45), (timer) {
+      if (currentIndex >= words.length) {
+        timer.cancel();
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _messages[messageIndex] = _ChatMessage(
+              text: _cleanMarkdown(fullText),
+              isUser: false,
+              time: _now(),
+            );
+          });
+        }
+        return;
+      }
+      currentIndex++;
+      final revealed = words.take(currentIndex).join(' ');
+      if (mounted) {
+        setState(() {
+          _messages[messageIndex] = _ChatMessage(
+            text: _cleanMarkdown(revealed),
+            isUser: false,
+            time: _now(),
+          );
+        });
+        _scrollToBottom();
+      }
+    });
   }
 
   void _scrollToBottom() {
@@ -139,6 +173,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _isLoading) return;
 
+    _typingTimer?.cancel();
+
     setState(() {
       _messages.add(_ChatMessage(text: text, isUser: true, time: _now()));
       _isLoading = true;
@@ -146,78 +182,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _scrollToBottom();
 
-    // Add placeholder for streaming response
-    final streamMsgIndex = _messages.length;
+    // Placeholder for the AI response that will be revealed word-by-word.
+    final responseIndex = _messages.length;
     setState(() {
       _messages.add(_ChatMessage(text: '', isUser: false, time: _now()));
     });
     _scrollToBottom();
 
     try {
-      final token = await const FlutterSecureStorage().read(key: HiveKeys.token) ?? '';
-      final baseUrl = ApiClient.instance.dio.options.baseUrl;
-      final url = Uri.parse('${baseUrl}api/chat/stream');
+      final res = await ApiClient.instance.sendChatMessage(text);
+      final data = res.data as Map<String, dynamic>?;
+      final reply = data?['response'] as String? ?? '';
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'message': text}),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to get response');
+      if (reply.isEmpty) {
+        throw Exception('Empty response from server');
       }
 
-      // Read SSE stream line by line
-      final stream = response.bodyBytes;
-      String accumulated = '';
-      List<int> buffer = [];
-
-      for (final byte in stream) {
-        buffer.add(byte);
-        // Check for double newline (SSE message separator)
-        if (buffer.length >= 2 &&
-            buffer[buffer.length - 2] == 10 &&
-            buffer[buffer.length - 1] == 10) {
-          final line = utf8.decode(buffer);
-          buffer.clear();
-
-          if (line.startsWith('data: ')) {
-            final jsonStr = line.substring(6).trim();
-            try {
-              final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-              if (data['done'] == true) break;
-              final chunk = data['text'] as String? ?? '';
-              if (chunk.isNotEmpty) {
-                accumulated += chunk;
-                if (mounted) {
-                  setState(() {
-                    _messages[streamMsgIndex] = _ChatMessage(
-                      text: _cleanMarkdown(accumulated),
-                      isUser: false,
-                      time: _now(),
-                    );
-                  });
-                  _scrollToBottom();
-                }
-              }
-            } catch (_) {}
-          }
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      _animateResponse(reply, responseIndex);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages[streamMsgIndex] = _ChatMessage(
+          _messages[responseIndex] = _ChatMessage(
             text: AppError.fromException(e),
             isUser: false,
             time: _now(),
