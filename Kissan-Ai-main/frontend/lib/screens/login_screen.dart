@@ -69,7 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         backgroundColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => context.go(Routes.welcome),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -128,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 Center(
                   child: TextButton(
-                    onPressed: () => context.go(Routes.register),
+                    onPressed: () => context.push(Routes.register),
                     child: const Text("New here? Create an account"),
                   ),
                 ),

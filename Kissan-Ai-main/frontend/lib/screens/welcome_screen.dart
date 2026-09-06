@@ -37,14 +37,14 @@ class WelcomeScreen extends ConsumerWidget {
               // Get Started → Register
               PillButton(
                 label: lang.t('welcome.get_started'),
-                onPressed: () => context.go(Routes.register),
+                onPressed: () => context.push(Routes.register),
               ),
               const SizedBox(height: 16),
 
               // Already have an account? Log in
               Center(
                 child: TextButton(
-                  onPressed: () => context.go(Routes.login),
+                  onPressed: () => context.push(Routes.login),
                   child: Text(
                     lang.t('auth.have_account'),
                     style: const TextStyle(

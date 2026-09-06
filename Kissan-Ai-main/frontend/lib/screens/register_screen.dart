@@ -137,7 +137,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         backgroundColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => context.go(Routes.welcome),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -383,7 +383,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
                 Center(
                   child: TextButton(
-                    onPressed: () => context.go(Routes.login),
+                    onPressed: () => context.push(Routes.login),
                     child: Text(lang.t('auth.have_account')),
                   ),
                 ),
