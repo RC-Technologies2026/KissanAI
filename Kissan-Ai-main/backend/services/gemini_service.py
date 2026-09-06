@@ -174,6 +174,63 @@ async def _try_groq_fallback(user_message: str) -> dict | None:
         return None
 
 
+async def generate_response_stream(
+    contents: list,
+    models_list: list[str] | None = None,
+    timeout: float = 30.0,
+):
+    """
+    Stream text from Gemini using streamGenerateContent API.
+    Yields text chunks as they arrive (SSE-style).
+    Returns the full accumulated text at the end.
+    """
+    if models_list is None:
+        models_list = chat_models_to_try
+
+    for model in models_list:
+        if _is_exhausted(model):
+            continue
+        url = f"{GEMINI_BASE_URL}/{model}:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}"
+        payload = {"contents": contents}
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", url, json=payload) as resp:
+                    if resp.status_code == 429:
+                        _mark_exhausted(model)
+                        continue
+                    if resp.status_code != 200:
+                        error_text = await resp.aread()
+                        logger.error("Gemini stream %s HTTP %d: %s", model, resp.status_code, error_text[:200])
+                        continue
+
+                    full_text = ""
+                    async for line in resp.aiter_lines():
+                        line = line.strip()
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            text = chunk.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                            if text:
+                                full_text += text
+                                yield text
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+
+                    if full_text:
+                        logger.info("Stream success with model %s", model)
+                        return
+        except Exception as e:
+            logger.warning("Model %s stream error: %s", model, e)
+            continue
+
+    # All models failed — yield error message
+    yield "Kisan AI is experiencing high demand right now. Please try again in a few minutes."
+
+
 async def generate_response(
     contents: list,
     user_message: str = "",

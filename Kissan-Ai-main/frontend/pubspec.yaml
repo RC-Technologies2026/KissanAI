@@ -38,6 +38,7 @@ dependencies:
 
   # Networking
   dio: ^5.7.0
+  http: ^1.2.0
 
   # Local Storage
   hive: ^2.2.3
