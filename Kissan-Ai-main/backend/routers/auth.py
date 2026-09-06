@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.user import User
@@ -26,6 +27,14 @@ async def register(request: Request, user_data: UserRegister, db: AsyncSession =
             detail="Email already registered",
         )
 
+    if user_data.phone:
+        result = await db.execute(select(User).where(User.phone == user_data.phone))
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered",
+            )
+
     new_user = User(
         email=user_data.email,
         password_hash=hash_password(user_data.password),
@@ -33,7 +42,15 @@ async def register(request: Request, user_data: UserRegister, db: AsyncSession =
         phone=user_data.phone,
     )
     db.add(new_user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Fallback in case of a race condition between the check above and the insert
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or phone number already registered",
+        )
     await db.refresh(new_user)
     return new_user
 
