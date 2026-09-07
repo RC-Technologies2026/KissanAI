@@ -121,8 +121,6 @@ Enter your plot details, crop type, and water availability to receive a personal
 ### Database Schema (15 tables)
 The ERD covers: USERS, PLOTS, PLOT_CROPS, PLOT_LIVESTOCK, IMAGES, DISEASE_DETECTIONS, PEST_DETECTIONS, PESTICIDE_RECOMMENDATIONS, INSECTICIDE_RECOMMENDATIONS, WEATHER_CACHE, IRRIGATION_GUIDANCE, CROP_RECOMMENDATIONS, CHAT_HISTORY, ANALYSIS_HISTORY, and PLANTS.
 
-See the full ERD in [`.qoder/rules/Kisan_AI_Database_ERD.mermaid`](.qoder/rules/Kisan_AI_Database_ERD.mermaid).
-
 ---
 
 ## Project Structure
